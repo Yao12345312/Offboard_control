@@ -9,7 +9,7 @@ options = {
   published_frame = "base_link",
   odom_frame = "odom",
   provide_odom_frame = true,
-  publish_frame_projected_to_2d = false,
+  publish_frame_projected_to_2d = true,
   use_pose_extrapolator = true,
   use_odometry = false,
   use_nav_sat = false,
@@ -31,51 +31,20 @@ options = {
 }
 
 MAP_BUILDER.use_trajectory_builder_2d = true
-MAP_BUILDER.num_background_threads =2
- 
-TRAJECTORY_BUILDER_2D.num_accumulated_range_data = 1 --积累几帧激光数据作为一个标准单位scan
-TRAJECTORY_BUILDER_2D.min_range = 0.2  --激光的最近有效距离
-TRAJECTORY_BUILDER_2D.max_range = 12.   --激光最远的有效距离
-TRAJECTORY_BUILDER_2D.missing_data_ray_length = 5. --无效激光数据设置距离为该数值
-TRAJECTORY_BUILDER_2D.use_imu_data = true  --是否使用imu数据
- 
-TRAJECTORY_BUILDER_2D.use_online_correlative_scan_matching = true
-TRAJECTORY_BUILDER_2D.real_time_correlative_scan_matcher.linear_search_window = 0.03 
---线距离搜索框，在这个框的大小内，搜索最佳scan匹配  减小该参数可以增强实时的建图效果，降低闭环优化的效果，形成闭环时，产生的重影较多
-TRAJECTORY_BUILDER_2D.real_time_correlative_scan_matcher. angular_search_window = math.rad(10.) --角度搜索框的大小
-TRAJECTORY_BUILDER_2D.real_time_correlative_scan_matcher.translation_delta_cost_weight = 20.
-TRAJECTORY_BUILDER_2D.real_time_correlative_scan_matcher.rotation_delta_cost_weight = 2e-1  
---影响的是过程中的效果，间接会影响最后的优化时间长
- 
-TRAJECTORY_BUILDER_2D.ceres_scan_matcher.translation_weight = 30.
-TRAJECTORY_BUILDER_2D.ceres_scan_matcher.rotation_weight = 30.
-TRAJECTORY_BUILDER_2D.ceres_scan_matcher.ceres_solver_options.max_num_iterations = 20
- 
- 
-TRAJECTORY_BUILDER_2D.submaps.num_range_data = 40
---num_range_data设置的值与CPU有这样一种关系，值小(10)，CPU使用率比较稳定，整体偏高，值大时，CPU短暂爆发使用(插入子图的时候)，平时使用率低，呈现极大的波动状态。
-TRAJECTORY_BUILDER_2D.submaps.range_data_inserter.probability_grid_range_data_inserter.hit_probability = 0.55
-TRAJECTORY_BUILDER_2D.submaps.range_data_inserter.probability_grid_range_data_inserter.miss_probability = 0.49
- 
-TRAJECTORY_BUILDER_2D.motion_filter.max_distance_meters = 0.001   --//尽量小点  // 如果移动距离过小, 或者时间过短, 不进行地图的更新
-TRAJECTORY_BUILDER_2D.motion_filter.max_angle_radians = math.rad(0.3)
-TRAJECTORY_BUILDER_2D.motion_filter.max_time_seconds = 3
- 
-POSE_GRAPH.optimization_problem.huber_scale = 1e2  --鲁棒核函数，去噪
- 
-POSE_GRAPH.optimize_every_n_nodes = 88   --后端优化节点
-POSE_GRAPH.global_constraint_search_after_n_seconds = 10 
- 
-POSE_GRAPH.optimization_problem.ceres_solver_options.max_num_iterations = 15  --优化迭代步数
-POSE_GRAPH.optimization_problem.ceres_solver_options.num_threads = 1
- 
-POSE_GRAPH.constraint_builder.max_constraint_distance = 15.
-POSE_GRAPH.constraint_builder.sampling_ratio = 0.3
-POSE_GRAPH.constraint_builder.min_score = 0.50
-POSE_GRAPH.constraint_builder.global_localization_min_score = 0.6
-POSE_GRAPH.constraint_builder.fast_correlative_scan_matcher.linear_search_window = 3.
-POSE_GRAPH.constraint_builder.fast_correlative_scan_matcher.branch_and_bound_depth = 5. --搜索方法，界定分支法，求解问题构成一个搜索树，depth是构造树的深度
-POSE_GRAPH.global_sampling_ratio = 0.001
 
+--TRAJECTORY_BUILDER_2D.use_online_correlative_scan_matching = true
+--TRAJECTORY_BUILDER_2D.use_imu_data = false  --是否使用imu数据
+--TRAJECTORY_BUILDER_2D.real_time_correlative_scan_matcher.linear_search_window = 0.15
+--TRAJECTORY_BUILDER_2D.real_time_correlative_scan_matcher.angular_search_window = math.rad(35.)
+--POSE_GRAPH.optimization_problem.huber_scale = 1e2
+
+-- 调整 IMU 在扫描匹配中的权重
+--TRAJECTORY_BUILDER_2D.ceres_scan_matcher.rotation_weight = 1e2  -- 原默认1e2（增大旋转权重）
+TRAJECTORY_BUILDER_2D.ceres_scan_matcher.translation_weight = 1e0  -- 平移权重保持或微调
+
+TRAJECTORY_BUILDER_2D.use_imu_data = true  --是否使用imu数据
+TRAJECTORY_BUILDER_2D.num_accumulated_range_data = 2 --积累几帧激光数据作为一个标准单位scan
+--TRAJECTORY_BUILDER_2D.motion_filter.max_distance_meters = 1   --//尽量小点  // 如果移动距离过小, 或者时间过短, 不进行地图的更新
+--POSE_GRAPH.optimize_every_n_nodes = 30  --后端优化节点
 
 return options
