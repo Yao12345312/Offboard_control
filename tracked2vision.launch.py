@@ -23,12 +23,27 @@ def generate_launch_description():
             output='screen'
         ),
          # 启动 servo_py 节点
+        #Node(
+        #    package='offboard_control',
+        #    executable='servo_node.py',
+        #    name='servo_node',
+        #    output='screen'
+        #),
+        
+        #启动云台节点
         Node(
-            package='offboard_control',
-            executable='servo_node.py',
-            name='servo_node',
+            package='offboard_control',  
+            executable='step_motor.py', 
+            name='step_motor_node',
             output='screen'
         ),
+	#启动激光笔控制节点
+        Node(
+            package='offboard_control',  
+            executable='laser_pointer_control.py', 
+            name='laser_pointer_control_node',
+            output='screen'
+        ),        
          # 启动 cv_py 节点
         Node(
             package='offboard_control',
@@ -70,6 +85,7 @@ def generate_launch_description():
         #    	)
         #	]
     	#),
+       
        
         #tf2:map->odom->base_link
         #Node(
