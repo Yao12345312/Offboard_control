@@ -4,10 +4,16 @@ from rclpy.node import Node
 from std_msgs.msg import String
 import serial
 import time
+from gpiozero import LED
+from threading import Timer
 
 class SerialCommunicationNode(Node):
     def __init__(self):
         super().__init__('serial_communication_node')
+
+        # 初始化 gpiozero 控制的 LED，GPIO17（物理引脚11）
+        self.led = LED(17)
+        self.led.off()  # 默认关闭
 
         # 串口初始化
         try:
@@ -27,12 +33,12 @@ class SerialCommunicationNode(Node):
 
         # 初始化上一个读取的数据为空
         self.last_received_data = None
+        self.last_command = None  # 上一个命令记录
 
     def read_serial_data(self):
         """从串口读取数据并发布到 /task_topic"""
         if self.serial_port.in_waiting > 0:
-            data=self.serial_port.readline().decode('gb2312',errors='ignore').strip()
-
+            data = self.serial_port.readline().decode('gb2312', errors='ignore').strip()
             if data and data != self.last_received_data:
                 self.last_received_data = data
                 self.get_logger().info(f"Received data from serial: {data}")
@@ -44,21 +50,25 @@ class SerialCommunicationNode(Node):
         """接收 /serial_screen_command 话题数据并发送到串口"""
         command = msg.data
         self.get_logger().info(f"Sending command to serial: {command}")
+        
         try:
-            # 使用 GB2312 编码发送数据到串口
             self.serial_port.write(command.encode('gb2312') + b'\xFF\xFF\xFF')
-	    
         except serial.SerialException as e:
             self.get_logger().error(f"Error while sending command to serial: {e}")
 
-    def __del__(self):
-        """关闭串口连接"""
-        if self.serial_port.is_open:
-            self.serial_port.close()
+        # 如果 command 与上次不同，则触发 LED
+        if command != self.last_command:
+            self.last_command = command
+            self.trigger_led()
+
+    def trigger_led(self):
+        """点亮LED 1秒后自动熄灭"""
+        self.get_logger().info("Command changed, LED ON for 1 second")
+        self.led.on()
+        Timer(1.0, self.led.off).start()  # 1秒后关闭 LED
 
 def main(args=None):
     rclpy.init(args=args)
-
     node = SerialCommunicationNode()
 
     try:
