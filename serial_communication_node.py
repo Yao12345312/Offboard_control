@@ -14,6 +14,9 @@ class SerialCommunicationNode(Node):
         # 初始化 gpiozero 控制的 LED，GPIO17（物理引脚11）
         self.led = LED(17)
         self.led.off()  # 默认关闭
+        self.current_data = None       # 当前要定时发布的数据
+        self.publish_timer = None      # 定时发布的计时器对象
+
 
         # 串口初始化
         try:
@@ -36,15 +39,28 @@ class SerialCommunicationNode(Node):
         self.last_command = None  # 上一个命令记录
 
     def read_serial_data(self):
-        """从串口读取数据并发布到 /task_topic"""
+        """从串口读取数据，如果与上次不同则定时发布"""
         if self.serial_port.in_waiting > 0:
             data = self.serial_port.readline().decode('gb2312', errors='ignore').strip()
-            if data and data != self.last_received_data:
-                self.last_received_data = data
-                self.get_logger().info(f"Received data from serial: {data}")
-                msg = String()
-                msg.data = data
-                self.task_publisher.publish(msg)
+
+            if data and data != self.current_data:
+                self.get_logger().info(f"New serial data detected: {data}")
+                self.current_data = data  # 更新当前数据内容
+
+                # 若已有定时器，先取消
+                if self.publish_timer is not None:
+                    self.publish_timer.cancel()
+
+                # 启动新的定时发布
+                self.publish_timer = self.create_timer(1.0, self.publish_current_data)
+
+    def publish_current_data(self):
+        """定时发布当前串口数据"""
+        if self.current_data:
+            msg = String()
+            msg.data = self.current_data
+            self.task_publisher.publish(msg)
+            self.get_logger().info(f"Published: {self.current_data}")
 
     def screen_command_callback(self, msg):
         """接收 /serial_screen_command 话题数据并发送到串口"""
