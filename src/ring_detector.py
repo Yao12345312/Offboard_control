@@ -1,5 +1,11 @@
+#!/usr/bin/env python3
+import rclpy
+from rclpy.node import Node
+from geometry_msgs.msg import Point  # 发布圆环中心位置
+from std_msgs.msg import Float32MultiArray  # 发布坐标偏差
 import cv2
 import numpy as np
+import time
 
 class KalmanFilter:
     """
@@ -20,18 +26,22 @@ class KalmanFilter:
                                                 [0, 0, 0, 0, 1, 0],
                                                 [0, 0, 0, 0, 0, 1]], np.float32)
         
+        self.Q = 0.1
+        self.R = 10
+        self.P = 1000
+
         # 过程噪声协方差矩阵
-        self.kalman.processNoiseCov = np.eye(6, dtype=np.float32) * 0.1
+        self.kalman.processNoiseCov = np.eye(6, dtype=np.float32) * self.Q
         
         # 测量噪声协方差矩阵
-        self.kalman.measurementNoiseCov = np.eye(3, dtype=np.float32) * 10
+        self.kalman.measurementNoiseCov = np.eye(3, dtype=np.float32) * self.R
         
         # 后验误差协方差矩阵
-        self.kalman.errorCovPost = np.eye(6, dtype=np.float32) * 1000
+        self.kalman.errorCovPost = np.eye(6, dtype=np.float32) * self.P
         
         self.is_initialized = False
         self.last_seen = 0
-        self.max_lost_frames = 5
+        self.max_lost_frames = 10
     
     def initialize(self, x, y, r):
         """初始化卡尔曼滤波器"""
@@ -69,69 +79,63 @@ class KalmanFilter:
         """增加丢失帧数"""
         self.last_seen += 1
 
-class RingTracker:
+class SingleRingTracker:
     """
-    圆环跟踪器类，管理多个圆环的卡尔曼滤波器
+    单圆环跟踪器类，管理一个圆环的卡尔曼滤波器
     """
     def __init__(self):
-        self.trackers = []
-        self.next_id = 0
+        self.kalman_filter = KalmanFilter()
         self.distance_threshold = 50  # 关联距离阈值
     
     def update(self, detections):
         """更新跟踪器"""
-        # 预测所有跟踪器的状态
-        predictions = []
-        for tracker in self.trackers:
-            pred = tracker.predict()
-            if pred is not None:
-                predictions.append(pred)
-            else:
-                predictions.append(None)
+        if not detections:
+            # 没有检测到圆环
+            if self.kalman_filter.is_initialized:
+                self.kalman_filter.increment_lost_frames()
+                
+                if not self.kalman_filter.is_lost():
+                    # 使用预测状态
+                    prediction = self.kalman_filter.predict()
+                    if prediction is not None:
+                        return prediction, "predicted"
+                else:
+                    # 重置跟踪器
+                    self.kalman_filter = KalmanFilter()
+                    return None, "lost"
+            return None, "no_detection"
         
-        # 数据关联 - 匹配检测结果与跟踪器
-        matched_trackers = []
-        unmatched_detections = list(detections)
+        # 只处理第一个检测到的圆环
+        det_x, det_y, det_r, inner_r = detections[0]
         
-        for i, tracker in enumerate(self.trackers):
-            if predictions[i] is None:
-                continue
-            
-            pred_x, pred_y, pred_r = predictions[i]
-            best_match = None
-            best_distance = float('inf')
-            
-            for j, (det_x, det_y, det_r, inner_r) in enumerate(unmatched_detections):
-                # 计算预测位置与检测位置的距离
+        if self.kalman_filter.is_initialized:
+            # 检查是否与现有跟踪器匹配
+            prediction = self.kalman_filter.predict()
+            if prediction is not None:
+                pred_x, pred_y, pred_r = prediction
                 distance = np.sqrt((pred_x - det_x)**2 + (pred_y - det_y)**2)
                 
-                if distance < self.distance_threshold and distance < best_distance:
-                    best_distance = distance
-                    best_match = j
-            
-            if best_match is not None:
-                # 找到匹配，更新跟踪器
-                det_x, det_y, det_r, inner_r = unmatched_detections[best_match]
-                corrected_state = tracker.update(det_x, det_y, det_r)
-                matched_trackers.append((tracker, corrected_state, inner_r, i))
-                unmatched_detections.pop(best_match)
+                if distance < self.distance_threshold:
+                    # 匹配成功，更新跟踪器
+                    corrected_state = self.kalman_filter.update(det_x, det_y, det_r)
+                    return corrected_state, "tracking"
+                else:
+                    # 距离太远，重新初始化
+                    self.kalman_filter = KalmanFilter()
+                    self.kalman_filter.initialize(det_x, det_y, det_r)
+                    corrected_state = self.kalman_filter.update(det_x, det_y, det_r)
+                    return corrected_state, "reinitialized"
             else:
-                # 没有匹配，增加丢失帧数
-                tracker.increment_lost_frames()
-        
-        # 创建新的跟踪器用于未匹配的检测
-        for det_x, det_y, det_r, inner_r in unmatched_detections:
-            new_tracker = KalmanFilter()
-            new_tracker.initialize(det_x, det_y, det_r)
-            corrected_state = new_tracker.update(det_x, det_y, det_r)
-            matched_trackers.append((new_tracker, corrected_state, inner_r, self.next_id))
-            self.trackers.append(new_tracker)
-            self.next_id += 1
-        
-        # 移除丢失的跟踪器
-        self.trackers = [t for t in self.trackers if not t.is_lost()]
-        
-        return matched_trackers
+                # 预测失败，重新初始化
+                self.kalman_filter = KalmanFilter()
+                self.kalman_filter.initialize(det_x, det_y, det_r)
+                corrected_state = self.kalman_filter.update(det_x, det_y, det_r)
+                return corrected_state, "reinitialized"
+        else:
+            # 首次检测，初始化跟踪器
+            self.kalman_filter.initialize(det_x, det_y, det_r)
+            corrected_state = self.kalman_filter.update(det_x, det_y, det_r)
+            return corrected_state, "initialized"
 
 def detect_rings(frame):
     """
@@ -150,9 +154,9 @@ def detect_rings(frame):
         dp=1,
         minDist=15,  # 圆心之间的最小距离
         param1=50,   # Canny边缘检测的高阈值
-        param2=50,   # 圆心检测的阈值
-        minRadius=50,  # 最小半径
-        maxRadius=70  # 最大半径
+        param2=40,   # 圆心检测的阈值
+        minRadius=100,  # 最小半径
+        maxRadius=150  # 最大半径
     )
     
     rings = []
@@ -167,7 +171,7 @@ def detect_rings(frame):
             
             # 创建内圆mask检测中心空洞
             inner_mask = np.zeros(gray.shape, dtype=np.uint8)
-            inner_radius = int(r * 0.72)  # 内圆半径为外圆的30%
+            inner_radius = int(r * 0.75)  # 内圆半径为外圆的75%
             cv2.circle(inner_mask, (x, y), inner_radius, 255, -1)
             
             # 计算内圆区域的平均亮度
@@ -186,67 +190,125 @@ def detect_rings(frame):
     
     return rings
 
-def main():
-    # 打开摄像头
-    cap = cv2.VideoCapture(0)
-    
-    if not cap.isOpened():
-        print("无法打开摄像头")
-        return
-    
-    # 初始化圆环跟踪器
-    tracker = RingTracker()
-    
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            print("无法读取摄像头帧")
-            break
+class RingDetectorNode(Node):
+    def __init__(self):
+        super().__init__('ring_detector_node')
         
-        # 识别圆环
+        # 初始化摄像头（保持原有设置）
+        self.cap = cv2.VideoCapture(0)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)  
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
+        
+        if not self.cap.isOpened():
+            self.get_logger().error("无法打开摄像头")
+            raise RuntimeError("无法打开摄像头")
+        
+        # 初始化跟踪器（保持原有逻辑）
+        self.tracker = SingleRingTracker()
+        self.camera_center_x = 160
+        self.camera_center_y = 120
+        
+        # 添加ROS2发布者
+        self.position_pub = self.create_publisher(Point, '/ring/position', 10)
+        self.offset_pub = self.create_publisher(Float32MultiArray, '/ring/offset', 10)
+        
+        # 保持原有的可视化窗口
+        self.window_name = 'Ring Detection'
+        cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
+        
+        # 使用定时器控制处理频率（约30Hz）
+        self.timer = self.create_timer(0.033, self.process_frame)
+        
+        self.get_logger().info("圆环检测节点已启动 (带可视化)")
+    
+    def process_frame(self):
+        ret, frame = self.cap.read()
+        if not ret:
+            self.get_logger().warn("无法读取摄像头帧")
+            return
+        
+        # 更新相机中心（保持原有逻辑）
+        height, width = frame.shape[:2]
+        self.camera_center_x = width // 2
+        self.camera_center_y = height // 2
+        
+        # 检测圆环（保持原有逻辑）
         raw_rings = detect_rings(frame)
         
-        # 使用卡尔曼滤波器跟踪圆环
-        tracked_rings = tracker.update(raw_rings)
+        # 跟踪圆环（保持原有逻辑）
+        tracked_state, tracking_status = self.tracker.update(raw_rings)
         
-        # 绘制原始检测结果（浅色）
+        # 可视化部分（保持原有逻辑）
         for (x, y, outer_r, inner_r) in raw_rings:
-            cv2.circle(frame, (x, y), outer_r, (100, 100, 100), 1)  # 灰色，原始检测
+            cv2.circle(frame, (x, y), outer_r, (100, 100, 100), 1)
         
-        # 绘制跟踪结果（亮色）
-        for tracker_obj, (x, y, r), inner_r, track_id in tracked_rings:
-            x, y, r = int(x), int(y), int(r)
+        if tracked_state is not None:
+            x, y, r = int(tracked_state[0]), int(tracked_state[1]), int(tracked_state[2])
+            inner_r = int(r * 0.72)
             
-            # 绘制外圆
-            cv2.circle(frame, (x, y), r, (0, 255, 0), 2)  # 绿色，跟踪结果
-            # 绘制内圆
-            cv2.circle(frame, (x, y), inner_r, (255, 0, 0), 2)  # 蓝色
-            # 绘制圆心
-            cv2.circle(frame, (x, y), 2, (0, 0, 255), 3)  # 红色
+            # 计算偏差（保持原有逻辑）
+            offset_x = x - self.camera_center_x
+            offset_y = y - self.camera_center_y
             
-            # 添加跟踪ID标签
-            cv2.putText(frame, f'Ring {track_id} ({x},{y})', 
-                       (x-50, y-r-10), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            # 发布ROS2消息（新增部分）
+            self.publish_detection(x, y, offset_x, offset_y)
+            
+            # 可视化跟踪结果（保持原有逻辑）
+            color = (0, 255, 0) if tracking_status == "tracking" else (0, 255, 255)
+            cv2.circle(frame, (x, y), r, color, 2)
+            cv2.circle(frame, (x, y), inner_r, (255, 0, 0), 2)
+            cv2.circle(frame, (x, y), 2, (0, 0, 255), 3)
+            cv2.line(frame, (self.camera_center_x, self.camera_center_y), 
+                    (x, y), (0, 255, 255), 2)
         
-        # 显示统计信息
-        info_text = f'Raw: {len(raw_rings)}, Tracked: {len(tracked_rings)}'
-        cv2.putText(frame, info_text, (10, 30), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        # 显示相机中心和帧率（保持原有逻辑）
+        cv2.circle(frame, (self.camera_center_x, self.camera_center_y), 5, (0, 255, 255), -1)
+        cv2.imshow(self.window_name, frame)
         
-        # 显示图例
-        cv2.putText(frame, 'Gray=Raw Detection, Green=Kalman Filtered', 
-                   (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        
-        # 显示结果
-        cv2.imshow('Ring Detection with Kalman Filter', frame)
-        
-        # 按 'q' 键退出
+        # 按'q'键退出（保持原有逻辑）
         if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+            self.cleanup()
+            rclpy.shutdown()
     
-    cap.release()
-    cv2.destroyAllWindows()
+    def publish_detection(self, x, y, offset_x, offset_y):
+        """发布检测结果到ROS2主题"""
+        # 发布位置消息
+        pos_msg = Point()
+        pos_msg.x = float(x)
+        pos_msg.y = float(y)
+        pos_msg.z = 0.0  # 2D情况下z设为0
+        self.position_pub.publish(pos_msg)
+        
+        # 发布偏差消息
+        offset_msg = Float32MultiArray()
+        offset_msg.data = [float(offset_x), float(offset_y)]
+        self.offset_pub.publish(offset_msg)
+        
+        # 可选：打印日志
+        self.get_logger().info(
+            f"发布数据 - 位置: ({x}, {y}), 偏差: ({offset_x:.1f}, {offset_y:.1f})",
+            throttle_duration_sec=1.0  # 限流，每秒最多打印一次
+        )
+    
+    def cleanup(self):
+        """清理资源"""
+        if self.cap.isOpened():
+            self.cap.release()
+        cv2.destroyAllWindows()
+        self.get_logger().info("资源已释放")
 
-if __name__ == "__main__":
+def main(args=None):
+    rclpy.init(args=args)
+    node = RingDetectorNode()
+    
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.cleanup()
+        node.destroy_node()
+        rclpy.shutdown()
+
+if __name__ == '__main__':
     main()
