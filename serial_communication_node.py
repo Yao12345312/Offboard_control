@@ -1,11 +1,11 @@
-#!/usr/bin/env python3  
+#!/usr/bin/env python3    
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 import serial
 import time
 from gpiozero import LED
-from threading import Timer
+from threading import Thread
 
 class SerialCommunicationNode(Node):
     def __init__(self):
@@ -17,7 +17,6 @@ class SerialCommunicationNode(Node):
         self.current_data = None       # 当前要定时发布的数据
         self.publish_timer = None      # 定时发布的计时器对象
 
-
         # 串口初始化
         try:
             self.serial_port = serial.Serial('/dev/ttyAMA3', baudrate=115200, timeout=5)
@@ -27,6 +26,9 @@ class SerialCommunicationNode(Node):
 
         # 创建发布器发布 /task_topic
         self.task_publisher = self.create_publisher(String, '/task_topic', 10)
+
+        # 创建发布器发布 /target_goods_number
+        self.target_goods_number_publisher = self.create_publisher(String, '/target_goods_number', 10)
 
         # 创建订阅器接收 /serial_screen_command
         self.create_subscription(String, '/serial_screen_command', self.screen_command_callback, 10)
@@ -38,37 +40,51 @@ class SerialCommunicationNode(Node):
         self.last_received_data = None
         self.last_command = None  # 上一个命令记录
 
+        # 启动串口读取线程
+        self.read_thread = Thread(target=self.read_serial_data_thread)
+        self.read_thread.daemon = True  # 设置为守护线程，随主线程退出
+        self.read_thread.start()
+
     def read_serial_data(self):
-        """从串口读取数据，如果与上次不同则定时发布"""
+        """串口数据读取接口，将数据发布到话题"""
         if self.serial_port.in_waiting > 0:
             data = self.serial_port.readline().decode('gb2312', errors='ignore').strip()
 
+            # 如果数据存在并且与上次的数据不同
             if data and data != self.current_data:
                 self.get_logger().info(f"New serial data detected: {data}")
                 self.current_data = data  # 更新当前数据内容
 
-                # 若已有定时器，先取消
-                if self.publish_timer is not None:
-                    self.publish_timer.cancel()
+                # 发布前12位（包括第12位）到 /task_topic
+                task_data = data[:12]  # 获取前12个字符
+                msg_task = String()
+                msg_task.data = task_data
+                self.task_publisher.publish(msg_task)
+                self.get_logger().info(f"Published to /task_topic: {task_data}")
 
-                # 启动新的定时发布
-                self.publish_timer = self.create_timer(1.0, self.publish_current_data)
-
-    def publish_current_data(self):
-        """定时发布当前串口数据"""
-        if self.current_data:
-            msg = String()
-            msg.data = self.current_data
-            self.task_publisher.publish(msg)
-            self.get_logger().info(f"Published: {self.current_data}")
+                # 判断第13位是否为 A、B、C、D，若是，则将其余部分发布到 /target_goods_number
+                if len(data) > 12 and data[12] in 'ABCD':
+                    target_goods_number = data[12:]  # 从第13位开始（包括第13位）
+                    msg_target = String()
+                    msg_target.data = target_goods_number
+                    self.target_goods_number_publisher.publish(msg_target)
+                    self.get_logger().info(f"Published to /target_goods_number: {target_goods_number}")
 
     def screen_command_callback(self, msg):
         """接收 /serial_screen_command 话题数据并发送到串口"""
         command = msg.data
         self.get_logger().info(f"Sending command to serial: {command}")
         
+        # 启动串口写入线程
+        write_thread = Thread(target=self.write_serial_data, args=(command,))
+        write_thread.daemon = True  # 设置为守护线程，随主线程退出
+        write_thread.start()
+
+    def write_serial_data(self, command):
+        """串口写数据"""
         try:
             self.serial_port.write(command.encode('gb2312') + b'\xFF\xFF\xFF')
+            self.get_logger().info(f"Sent command to serial: {command}")
         except serial.SerialException as e:
             self.get_logger().error(f"Error while sending command to serial: {e}")
 
@@ -78,10 +94,21 @@ class SerialCommunicationNode(Node):
             self.trigger_led()
 
     def trigger_led(self):
-        """点亮LED 1秒后自动熄灭"""
-        self.get_logger().info("Command changed, LED ON for 1 second")
-        self.led.on()
-        Timer(1.0, self.led.off).start()  # 1秒后关闭 LED
+        """点亮 LED 1 秒后自动熄灭（线程方式更稳）"""
+        def led_flash():
+            self.get_logger().info("Command changed, LED ON for 1 second")
+            self.led.on()
+            time.sleep(1.0)
+            self.led.off()
+            self.get_logger().info("LED OFF")
+
+        Thread(target=led_flash, daemon=True).start()
+
+    def read_serial_data_thread(self):
+        """独立线程循环读取串口数据"""
+        while rclpy.ok():
+            self.read_serial_data()
+            time.sleep(0.1)  # 控制读取频率
 
 def main(args=None):
     rclpy.init(args=args)
