@@ -8,8 +8,11 @@
 #include <chrono>
 #include <cmath>
 #include <thread>
+#include <vector>
+#include <sstream>
 #include "rclcpp/qos.hpp"
 #include "std_msgs/msg/int32.hpp"
+#include "std_msgs/msg/string.hpp"
 
 using namespace std::chrono_literals;
 
@@ -67,6 +70,13 @@ public:
             current_vel_ = *msg;
            });        
 
+        qr_data_subscription_ = this->create_subscription<std_msgs::msg::String>(
+            "qr_data",  
+            rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_sensor_data)).best_effort(),
+            [this](const std_msgs::msg::String::SharedPtr msg) {
+                // 获取cv识别的二维码数据
+                qr_data_ = msg->data;
+            }); 
         //姿态发布器初始化
          //pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(
           //   "mavros/setpoint_position/local", 10);
@@ -164,8 +174,8 @@ private:
                 auto elapsed = this->now() - hold_pisition_start_time_;
                 if (elapsed.seconds() >= 5.0) {
                     RCLCPP_INFO(this->get_logger(), "go to step 301");
-                    // step_ = 301;
-                    step_ = 4;
+                    step_ = 301;
+                    //step_ = 4;
                     hold_position_start_ = false;  // 清除状态
                 }
             }
@@ -293,14 +303,14 @@ private:
                         {
                         servo_action_start_time_=this->now();  
                         servo_action_started_=true;
-                        control_servo(2, 80); 
-                        // control_servo(2, 0);   
+                        //control_servo(2, 80); 
+                        control_servo(2, 0);   
                         }
                         else 
                         {
                             auto elapsed_servo = this->now() - servo_action_start_time_;
-                            control_servo(2, 80); 
-                            // control_servo(2, 0); 
+                            //control_servo(2, 80); 
+                            control_servo(2, 0); 
                             if (elapsed_servo.seconds() >= 0.6) {
                                 RCLCPP_INFO(this->get_logger(), "go to step 502");
                                 step_ = 502;
@@ -453,7 +463,8 @@ private:
                     auto elapsed = this->now() - hold_pisition_start_time_;
                     if (elapsed.seconds() >= 5.0) {
                         RCLCPP_INFO(this->get_logger(), "go to step 801");
-                        step_ = 801;
+                        // step_ = 801;
+                        step_ = 9;
                         hold_position_start_ = false;  // 清除状态
                     }
                 }
@@ -597,12 +608,12 @@ private:
                 if (!hold_position_start_) {
                     hold_pisition_start_time_= this->now();
                     hold_position_start_ = true;
-                    publish_position(6.10, -0.73, 1.3);
+                    publish_position(6.60, -0.73, 1.3);
                     RCLCPP_INFO(this->get_logger(), "reach step 10");
                 } 
                 else 
                 {
-                    publish_position(6.10, -0.73, 1.3); 
+                    publish_position(6.60, -0.73, 1.3); 
                     auto elapsed = this->now() - hold_pisition_start_time_;
                     if (elapsed.seconds() >= 5.0) {
                     RCLCPP_INFO(this->get_logger(), "go to step 11");
@@ -618,12 +629,12 @@ private:
                 if (!hold_position_start_) {
                     hold_pisition_start_time_= this->now();
                     hold_position_start_ = true;
-                    publish_position(6.10, -0.73, 1.7);
+                    publish_position(6.60, -0.73, 1.7);
                     RCLCPP_INFO(this->get_logger(), "reach step 11");
                 } 
                 else 
                 {
-                    publish_position(6.10, -0.73, 1.7); 
+                    publish_position(6.60, -0.73, 1.7); 
                     auto elapsed = this->now() - hold_pisition_start_time_;
                     if (elapsed.seconds() >= 5.0) {
                     RCLCPP_INFO(this->get_logger(), "go to step 12");
@@ -639,12 +650,12 @@ private:
                 if (!hold_position_start_) {
                     hold_pisition_start_time_= this->now();
                     hold_position_start_ = true;
-                    publish_position(6.10, -2.27, 1.7);
+                    publish_position(6.60, -2.27, 1.7);
                     RCLCPP_INFO(this->get_logger(), "reach step 12");
                 } 
                 else 
                 {
-                    publish_position(6.10, -2.27, 1.7); 
+                    publish_position(6.60, -2.27, 1.7); 
                     auto elapsed = this->now() - hold_pisition_start_time_;
                     if (elapsed.seconds() >= 5.0) {
                     RCLCPP_INFO(this->get_logger(), "go to step 13");
@@ -660,12 +671,12 @@ private:
                 if (!hold_position_start_) {
                     hold_pisition_start_time_= this->now();
                     hold_position_start_ = true;
-                    publish_position(6.10, -2.27, 1.3);
+                    publish_position(6.60, -2.27, 1.3);
                     RCLCPP_INFO(this->get_logger(), "reach step 13");
                 } 
                 else 
                 {
-                    publish_position(6.10, -2.27, 1.3); 
+                    publish_position(6.60, -2.27, 1.3); 
                     auto elapsed = this->now() - hold_pisition_start_time_;
                     if (elapsed.seconds() >= 5.0) {
                     RCLCPP_INFO(this->get_logger(), "go to step 14");
@@ -765,12 +776,19 @@ private:
             if (!hold_position_start_) {
                 hold_pisition_start_time_= this->now();
                 hold_position_start_ = true;
-                publish_position(0.0, 1.6, 1.3);
+                //判断降落位置
+                if(process_qr_data(qr_data_)==1)
+                {
+                land_position_=-1.6;}
+                else{
+                land_position_=1.6;
+                }
+                publish_position(0.0, land_position_, 1.3);
                 RCLCPP_INFO(this->get_logger(), "reach step 18");
             } 
             else 
             {
-                publish_position(0.0, 1.6, 1.3); 
+                publish_position(0.0, land_position_, 1.3); 
                 auto elapsed = this->now() - hold_pisition_start_time_;
                 if (elapsed.seconds() >= 5.0) {
                     RCLCPP_INFO(this->get_logger(), "go to step 19");
@@ -785,12 +803,12 @@ private:
                 if (!hold_position_start_) {
                 hold_pisition_start_time_ = this->now();
                 hold_position_start_ = true;
-                publish_position(0.0, 1.60, 0.21);
+                publish_position(0.0, land_position_, 0.21);
                     RCLCPP_INFO(this->get_logger(), "start step 19");
                 }
                 else { 
 
-                publish_position(0.0, 1.60, 0.21);
+                publish_position(0.0, land_position_, 0.21);
                 auto elapsed = this->now() - hold_pisition_start_time_;
 
                 if (elapsed.seconds() >= 8.0) {
@@ -1002,9 +1020,41 @@ private:
     RCLCPP_INFO(this->get_logger(), "Published servo angle: %d", angle);
 }
 
-    
+    //处理扫描到的二维码内容,若为left，返回1，若为right，返回2
+    int process_qr_data(const std::string& qr_data)
+{
+    // 以逗号分割
+    std::vector<std::string> parts;
+    std::stringstream ss(qr_data);
+    std::string item;
+
+    while (std::getline(ss, item, ',')) {
+        parts.push_back(item);
+    }
+
+    // 检查是否有足够字段
+    if (parts.size() < 3) {
+        RCLCPP_WARN(rclcpp::get_logger("qr_processor"), "二维码数据字段不足: %s", qr_data.c_str());
+        return 0;
+    }
+
+    std::string target = parts[2];  // 第三个字段（即第二个逗号之后）
+
+    if (target == "left") {
+        return 1;
+    } else if (target == "right") {
+        return 2;
+    } else {
+        return 0;  // 非目标内容
+    }
+}
+
     int step_;
     int flag_;
+
+    float land_position_=0;
+    //保存扫描到的二维码
+    std::string qr_data_;
 
     rclcpp::Time last_request_time_;
     rclcpp::Time start_time_;
@@ -1030,6 +1080,8 @@ private:
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr pose_sub_;
 
     rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr vel_sub_;
+
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr qr_data_subscription_;
 
     //  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_pub_;
 
