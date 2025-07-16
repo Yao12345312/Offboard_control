@@ -13,6 +13,7 @@
 #include "rclcpp/qos.hpp"
 #include "std_msgs/msg/int32.hpp"
 #include "std_msgs/msg/string.hpp"
+#include "std_msgs"
 
 using namespace std::chrono_literals;
 
@@ -56,18 +57,18 @@ public:
             });
         //获取飞机位姿数据
        // MAVROS 的 /pose 话题订阅使用 BestEffort
-         pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
+        pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
              "mavros/local_position/pose",
               rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_sensor_data)).best_effort(),
             [this](const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
-            current_pose_ = *msg;
+            current_pose_ = msg->data;
            });
 
         vel_sub_ = this->create_subscription<geometry_msgs::msg::TwistStamped>(
             "mavros/local_position/velocity",
             rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_sensor_data)).best_effort(),
             [this](const geometry_msgs::msg::TwistStamped::SharedPtr msg) {
-            current_vel_ = *msg;
+            current_vel_ = msg->data;
            });        
 
         qr_data_subscription_ = this->create_subscription<std_msgs::msg::String>(
@@ -77,6 +78,14 @@ public:
                 // 获取cv识别的二维码数据
                 qr_data_ = msg->data;
             }); 
+
+        ring_offset_sub_ = this->create_subscription<std_msgs::msg::String>(
+            "/ring/offset",  
+            rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_sensor_data)).best_effort(),
+            [this](const std_msgs::msg::String::SharedPtr msg) {
+                // 获取cv识别的圆环与中心的偏差
+                offset_msg_ = msg->data;
+            });    
         //姿态发布器初始化
          //pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(
           //   "mavros/setpoint_position/local", 10);
@@ -634,6 +643,13 @@ private:
                 } 
                 else 
                 {
+                    // 还未确定相机x和实际x的关系
+                    // if (!Ex_vision_fly_to_target(offset_msg_)) {
+                    //     RCLCPP_INFO(this->get_logger(), "go to step 12");
+                    //     step_ = 12;
+                    //     ring_center_x = current_pos.x
+                    //     hold_position_start_ = false;  // 清除状态
+                    // }
                     publish_position(6.60, -0.73, 1.7); 
                     auto elapsed = this->now() - hold_pisition_start_time_;
                     if (elapsed.seconds() >= 5.0) {
@@ -837,7 +853,7 @@ private:
     }
 
     void handle_init_phase() {
-            auto message = mavros_msgs::msg::PositionTarget();
+        auto message = mavros_msgs::msg::PositionTarget();
         message.header.stamp = this->now();
         message.header.frame_id = "map";
         message.coordinate_frame = mavros_msgs::msg::PositionTarget::FRAME_LOCAL_NED;
@@ -977,6 +993,22 @@ private:
         // 发布速度命令
         raw_pub->publish(message);
     }
+
+    bool Ex_vision_fly_to_target(double errx) {
+        double vx = pid_x_.compute(tx, current_pose_.pose.position.x, current_vel_.twist.linear.x, dt);
+        publish_velocity(vx, 0, 0);
+        double dist_x = std::fabs(ex);
+        
+        if (dist_x <= 0.15) 
+        {
+            return 1;
+        } 
+        else 
+        { 
+	        return 0;
+        }
+
+    }
     
     void publish_position(double px, double py, double pz) {
         auto message = mavros_msgs::msg::PositionTarget();
@@ -1051,10 +1083,12 @@ private:
 
     int step_;
     int flag_;
+    int ring_center_x;
 
     float land_position_=0;
     //保存扫描到的二维码
     std::string qr_data_;
+    std_msgs::msg::Float32MultiArray offset_msg_; 
 
     rclcpp::Time last_request_time_;
     rclcpp::Time start_time_;
