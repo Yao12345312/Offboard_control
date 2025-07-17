@@ -141,7 +141,7 @@ private:
                 auto elapsed = this->now() - hold_pisition_start_time_;
                 if (elapsed.seconds() >= 15.0) {
                     RCLCPP_INFO(this->get_logger(), "go to step 2");
-                    step_ = 2;
+                    step_ = 1000;
                     hold_position_start_ = false;  // 清除状态
                 }
             }
@@ -844,10 +844,107 @@ private:
 
                     }
                 }
-                break;
-
+            
+            break;
                 
-        }
+            case 1000: // 穿圆环起点
+            
+                if (!hold_position_start_) {
+                    hold_pisition_start_time_= this->now();
+                    hold_position_start_ = true;
+                    publish_position(0.00, 0.00, 1.3);
+                    RCLCPP_INFO(this->get_logger(), "reach step 1000");
+                } 
+                else 
+                {
+                    publish_position(0.00, 0.00, 1.3); 
+                    auto elapsed = this->now() - hold_pisition_start_time_;
+                    if (elapsed.seconds() >= 1.0) {
+                    RCLCPP_INFO(this->get_logger(), "go to step 1001");
+                    step_ = 1001;
+                    hold_position_start_ = false;  // 清除状态
+                    }
+                }
+                
+            break;
+
+            case 1001: // 穿圆环起点
+            
+                if (!hold_position_start_) {
+                    hold_pisition_start_time_= this->now();
+                    hold_position_start_ = true;
+                    publish_position(0.00, 0.00, 1.7);
+                    RCLCPP_INFO(this->get_logger(), "reach step 1001");
+                } 
+                else 
+                {
+                    // 还未确定相机x和实际x的关系
+                    if (!Ex_vision_fly_to_target(offset_msg_)) {
+                        RCLCPP_INFO(this->get_logger(), "go to step 1002");
+                        step_ = 1002;
+                        ring_center_x = current_pos.x
+                        hold_position_start_ = false;  // 清除状态
+                    }
+                   
+                }
+                
+            break;
+
+            case 1002: // 穿圆环终点
+            
+                if (!hold_position_start_) {
+                    hold_pisition_start_time_= this->now();
+                    hold_position_start_ = true;
+                    publish_position(ring_center_x, 0.00, 1.7);
+                    RCLCPP_INFO(this->get_logger(), "reach step 1002");
+                } 
+                else 
+                {
+                    publish_position(ring_center_x, 0.00, 1.7); 
+                    auto elapsed = this->now() - hold_pisition_start_time_;
+                    if (elapsed.seconds() >= 5.0) {
+                    RCLCPP_INFO(this->get_logger(), "go to step 1019");
+                    step_ = 1019;
+                    hold_position_start_ = false;  // 清除状态
+                    }
+                }
+                
+            break;
+
+            case 1019: // 穿圆环终点
+            
+                if (!hold_position_start_) {
+                hold_pisition_start_time_ = this->now();
+                hold_position_start_ = true;
+                publish_position(ring_center_x, 0.00, 0.21);
+                    RCLCPP_INFO(this->get_logger(), "start step 19");
+                }
+                else { 
+
+                publish_position(ring_center_x, 0.00, 0.21);
+                auto elapsed = this->now() - hold_pisition_start_time_;
+
+                if (elapsed.seconds() >= 8.0) {
+                    RCLCPP_INFO(this->get_logger(), "landed.");
+
+                    auto arm_req = std::make_shared<mavros_msgs::srv::CommandBool::Request>();
+
+                    arm_req->value = false;
+
+                    arming_client_->async_send_request(arm_req);
+                    // 等待 3 秒，确保 PX4 收到命令
+                    rclcpp::sleep_for(std::chrono::seconds(3));
+
+                    RCLCPP_INFO(this->get_logger(), "Disarm request sent. Shutting down...");
+
+                    rclcpp::shutdown();   // 关闭节点
+
+                    }
+                }
+            
+            break;
+
+        }        
             auto t2 = this->now();
             // RCLCPP_INFO(this->get_logger(), "%.2f ms", (t2 - t1).nanoseconds() / 1e6);
     }
