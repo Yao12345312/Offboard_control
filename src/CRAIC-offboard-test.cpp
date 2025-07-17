@@ -13,7 +13,7 @@
 #include "rclcpp/qos.hpp"
 #include "std_msgs/msg/int32.hpp"
 #include "std_msgs/msg/string.hpp"
-#include "std_msgs"
+#include "std_msgs/msg/float32_multi_array.hpp"
 
 using namespace std::chrono_literals;
 
@@ -61,14 +61,14 @@ public:
              "mavros/local_position/pose",
               rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_sensor_data)).best_effort(),
             [this](const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
-            current_pose_ = msg->data;
+            current_pose_ = *msg;
            });
 
         vel_sub_ = this->create_subscription<geometry_msgs::msg::TwistStamped>(
             "mavros/local_position/velocity",
             rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_sensor_data)).best_effort(),
             [this](const geometry_msgs::msg::TwistStamped::SharedPtr msg) {
-            current_vel_ = msg->data;
+            current_vel_ = *msg;
            });        
 
         qr_data_subscription_ = this->create_subscription<std_msgs::msg::String>(
@@ -79,12 +79,12 @@ public:
                 qr_data_ = msg->data;
             }); 
 
-        ring_offset_sub_ = this->create_subscription<std_msgs::msg::String>(
-            "/ring/offset",  
+        ring_offset_sub_ = this->create_subscription<std_msgs::msg::Float32MultiArray>(
+            "ring/offset",  
             rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_sensor_data)).best_effort(),
-            [this](const std_msgs::msg::String::SharedPtr msg) {
+            [this](const std_msgs::msg::Float32MultiArray::SharedPtr msg) {
                 // 获取cv识别的圆环与中心的偏差
-                offset_msg_ = msg->data;
+                offset_msg_ = *msg;
             });    
         //姿态发布器初始化
          //pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(
@@ -644,12 +644,13 @@ private:
                 else 
                 {
                     // 还未确定相机x和实际x的关系
-                    // if (!Ex_vision_fly_to_target(offset_msg_)) {
-                    //     RCLCPP_INFO(this->get_logger(), "go to step 12");
-                    //     step_ = 12;
-                    //     ring_center_x = current_pos.x
-                    //     hold_position_start_ = false;  // 清除状态
-                    // }
+                    double errx = offset_msg_.data[0];
+                     if (!Ex_vision_fly_to_target(errx)) {
+                         RCLCPP_INFO(this->get_logger(), "go to step 12");
+                         step_ = 12;
+                         ring_center_x = current_pose_.pose.position.x;
+                         hold_position_start_ = false;  // 清除状态
+                     }
                     publish_position(6.60, -0.73, 1.7); 
                     auto elapsed = this->now() - hold_pisition_start_time_;
                     if (elapsed.seconds() >= 5.0) {
@@ -795,9 +796,9 @@ private:
                 //判断降落位置
                 if(process_qr_data(qr_data_)==1)
                 {
-                land_position_=-1.6;}
+                land_position_=1.6;}
                 else{
-                land_position_=1.6;
+                land_position_=-1.6;
                 }
                 publish_position(0.0, land_position_, 1.3);
                 RCLCPP_INFO(this->get_logger(), "reach step 18");
@@ -878,11 +879,12 @@ private:
                 } 
                 else 
                 {
+                    double errx = offset_msg_.data[0];
                     // 还未确定相机x和实际x的关系
-                    if (!Ex_vision_fly_to_target(offset_msg_)) {
+                    if (!Ex_vision_fly_to_target(errx)) {
                         RCLCPP_INFO(this->get_logger(), "go to step 1002");
                         step_ = 1002;
-                        ring_center_x = current_pos.x
+                        ring_center_x = current_pose_.pose.position.x;
                         hold_position_start_ = false;  // 清除状态
                     }
                    
@@ -1092,9 +1094,11 @@ private:
     }
 
     bool Ex_vision_fly_to_target(double errx) {
+        double tx = current_pose_.pose.position.x+errx; // 你可能需要根据实际需要来计算 tx
+        double dt=0.02;
         double vx = pid_x_.compute(tx, current_pose_.pose.position.x, current_vel_.twist.linear.x, dt);
         publish_velocity(vx, 0, 0);
-        double dist_x = std::fabs(ex);
+        double dist_x = std::fabs(errx);
         
         if (dist_x <= 0.15) 
         {
@@ -1180,11 +1184,13 @@ private:
 
     int step_;
     int flag_;
-    int ring_center_x;
+    
+    float ring_center_x;
 
     float land_position_=0;
     //保存扫描到的二维码
     std::string qr_data_;
+    
     std_msgs::msg::Float32MultiArray offset_msg_; 
 
     rclcpp::Time last_request_time_;
@@ -1213,6 +1219,8 @@ private:
     rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr vel_sub_;
 
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr qr_data_subscription_;
+    
+    rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr ring_offset_sub_;
 
     //  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_pub_;
 
