@@ -644,13 +644,13 @@ private:
                 else 
                 {
                     // 还未确定相机x和实际x的关系
-                    double errx = offset_msg_.data[0];
-                     if (!Ex_vision_fly_to_target(errx)) {
-                         RCLCPP_INFO(this->get_logger(), "go to step 12");
-                         step_ = 12;
-                         ring_center_x = current_pose_.pose.position.x;
-                         hold_position_start_ = false;  // 清除状态
-                     }
+                    //double errx = offset_msg_.data[0];
+                    // if (!Ex_vision_fly_to_target(errx)) {
+                    //     RCLCPP_INFO(this->get_logger(), "go to step 12");
+                    //     step_ = 12;
+                    //     ring_center_x = current_pose_.pose.position.x;
+                    //     hold_position_start_ = false;  // 清除状态
+                    // }
                     publish_position(6.60, -0.73, 1.7); 
                     auto elapsed = this->now() - hold_pisition_start_time_;
                     if (elapsed.seconds() >= 5.0) {
@@ -975,15 +975,7 @@ private:
         
 
         raw_pub->publish(message);
-/*
-         // 发布固定位置 setpoint 保持 FCU 接受 OFFBOARD 模式
-    geometry_msgs::msg::PoseStamped pose;
-    pose.header.stamp = this->now();
-    pose.pose.position.x = 0.0;
-    pose.pose.position.y = 0.0;
-    pose.pose.position.z = 1.0; // 起飞目标高度
-    pose_pub_->publish(pose); // 关键：>2Hz 持续发布
-  */      
+
         // 模式未切换则切换
         if (current_state_.mode != "OFFBOARD") {
             if ((this->now() - last_request_time_).seconds() > 2.0) {
@@ -1016,26 +1008,7 @@ private:
         flag_ = 0;
     }
 
-    bool arm_drone(bool arm)
-    {
-        if (current_state_.armed == arm) return true; // 状态已满足
-
-        auto request = std::make_shared<mavros_msgs::srv::CommandBool::Request>();
-        request->value = arm;
-
-        // 定义服务响应回调
-        using ServiceResponseFuture = rclcpp::Client<mavros_msgs::srv::CommandBool>::SharedFuture;
-        auto response_received_callback = [this, arm](ServiceResponseFuture future) {
-            auto response = future.get();
-            if (response->success) {
-                RCLCPP_INFO(this->get_logger(), "Drone %s", arm ? "armed" : "disarmed");
-            }
-        };
-
-        arming_client_->async_send_request(request, response_received_callback);
-        last_request_time_ = this->now();
-        return false; // 需要等待响应
-    }
+    
 
 
     int fly_to_target(double tx, double ty, double tz, double dt) {
