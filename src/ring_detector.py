@@ -171,7 +171,7 @@ def detect_rings(frame):
             
             # 创建内圆mask检测中心空洞
             inner_mask = np.zeros(gray.shape, dtype=np.uint8)
-            inner_radius = int(r * 0.75)  # 内圆半径为外圆的75%
+            inner_radius = int(r * 0.71)  # 内圆半径为外圆的75%
             cv2.circle(inner_mask, (x, y), inner_radius, 255, -1)
             
             # 计算内圆区域的平均亮度
@@ -244,11 +244,11 @@ class RingDetectorNode(Node):
         
         if tracked_state is not None:
             x, y, r = int(tracked_state[0]), int(tracked_state[1]), int(tracked_state[2])
-            inner_r = int(r * 0.72)
+            inner_r = int(r * 0.75)
             
             # 计算偏差（保持原有逻辑）
-            offset_x = x - self.camera_center_x
-            offset_y = y - self.camera_center_y
+            offset_x = (x - self.camera_center_x) * 0.0025
+            offset_y = (y - self.camera_center_y) * 0.0025
             
             # 发布ROS2消息（新增部分）
             self.publish_detection(x, y, offset_x, offset_y)
@@ -277,7 +277,7 @@ class RingDetectorNode(Node):
         pos_msg.x = float(x)
         pos_msg.y = float(y)
         pos_msg.z = 0.0  # 2D情况下z设为0
-        self.position_pub.publish(pos_msg)
+        #self.position_pub.publish(pos_msg)
         
         # 发布偏差消息
         offset_msg = Float32MultiArray()
@@ -286,8 +286,8 @@ class RingDetectorNode(Node):
         
         # 可选：打印日志
         self.get_logger().info(
-            f"发布数据 - 位置: ({x}, {y}), 偏差: ({offset_x:.1f}, {offset_y:.1f})",
-            throttle_duration_sec=1.0  # 限流，每秒最多打印一次
+            f"偏差: ({offset_x:.3f}, {offset_y:.3f})"
+            # throttle_duration_sec=1.0  # 限流，每秒最多打印一次
         )
     
     def cleanup(self):
