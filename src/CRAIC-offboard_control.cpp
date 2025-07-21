@@ -14,6 +14,8 @@
 #include "std_msgs/msg/int32.hpp"
 #include "std_msgs/msg/string.hpp"
 
+#define Ring_positon_x 6.0
+
 using namespace std::chrono_literals;
 
 class PID {
@@ -615,12 +617,12 @@ private:
                 if (!hold_position_start_) {
                     hold_pisition_start_time_= this->now();
                     hold_position_start_ = true;
-                    publish_position(6.00, -0.73, 1.3);
+                    publish_position(Ring_positon_x, -0.73, 1.3);
                     RCLCPP_INFO(this->get_logger(), "reach step 10");
                 } 
                 else 
                 {
-                    publish_position(6.00, -0.73, 1.3); 
+                    publish_position(Ring_positon_x, -0.73, 1.3); 
                     auto elapsed = this->now() - hold_pisition_start_time_;
                     if (elapsed.seconds() >= 5.0) {
                     RCLCPP_INFO(this->get_logger(), "go to step 11");
@@ -636,12 +638,12 @@ private:
                 if (!hold_position_start_) {
                     hold_pisition_start_time_= this->now();
                     hold_position_start_ = true;
-                    publish_position(6.00, -0.73, 1.65);
+                    publish_position(Ring_positon_x, -0.73, 1.6);
                     RCLCPP_INFO(this->get_logger(), "reach step 11");
                 } 
                 else 
                 {
-                    publish_position(6.00, -0.73, 1.65); 
+                    publish_position(Ring_positon_x, -0.73, 1.6); 
                     auto elapsed = this->now() - hold_pisition_start_time_;
                     if (elapsed.seconds() >= 5.0) {
                     RCLCPP_INFO(this->get_logger(), "go to step 12");
@@ -657,12 +659,12 @@ private:
                 if (!hold_position_start_) {
                     hold_pisition_start_time_= this->now();
                     hold_position_start_ = true;
-                    publish_position(6.00, -2.27, 1.65);
+                    publish_position(Ring_positon_x, -2.27, 1.6);
                     RCLCPP_INFO(this->get_logger(), "reach step 12");
                 } 
                 else 
                 {
-                    publish_position(6.00, -2.27, 1.65); 
+                    publish_position(Ring_positon_x, -2.27, 1.6); 
                     auto elapsed = this->now() - hold_pisition_start_time_;
                     if (elapsed.seconds() >= 5.0) {
                     RCLCPP_INFO(this->get_logger(), "go to step 13");
@@ -678,12 +680,12 @@ private:
                 if (!hold_position_start_) {
                     hold_pisition_start_time_= this->now();
                     hold_position_start_ = true;
-                    publish_position(6.00, -2.27, 1.3);
+                    publish_position(Ring_positon_x, -2.27, 1.3);
                     RCLCPP_INFO(this->get_logger(), "reach step 13");
                 } 
                 else 
                 {
-                    publish_position(6.00, -2.27, 1.3); 
+                    publish_position(Ring_positon_x, -2.27, 1.3); 
                     auto elapsed = this->now() - hold_pisition_start_time_;
                     if (elapsed.seconds() >= 5.0) {
                     RCLCPP_INFO(this->get_logger(), "go to step 14");
@@ -810,12 +812,12 @@ private:
                 if (!hold_position_start_) {
                 hold_pisition_start_time_ = this->now();
                 hold_position_start_ = true;
-                publish_position(0.0, land_position_, 0.21);
+                publish_position(0.0, land_position_, 0.17);
                     RCLCPP_INFO(this->get_logger(), "start step 19");
                 }
                 else { 
 
-                publish_position(0.0, land_position_, 0.21);
+                publish_position(0.0, land_position_, 0.17);
                 auto elapsed = this->now() - hold_pisition_start_time_;
 
                 if (elapsed.seconds() >= 8.0) {
