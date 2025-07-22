@@ -2,5 +2,5 @@
 
 my_auto_boot.service存放位置
 ```
-/etc/systemd/system/my_script.service
+/etc/systemd/system
 ```
