@@ -1,0 +1,21 @@
+[Unit]
+Description=ROS 2 Launch Offboard
+After=network.target
+
+[Service]
+Type=simple
+
+ExecStart=/home/pi5/mavros2_ws/src/offboard_control/scripts/mission.sh
+
+# 设置工作目录
+WorkingDirectory=/home/pi5/mavros2_ws
+
+# 设置为自动重启服务
+Restart=on-failure
+
+User=pi5
+
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
