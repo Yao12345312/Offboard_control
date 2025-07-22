@@ -16,4 +16,7 @@ sudo systemctl daemon-reload
 sudo systemctl start my_auto_boot.service
 
 ```
-
+查看某个服务运行日志，检查状态
+```
+sudo journalctl -u my_auto_boot.service -f
+```
