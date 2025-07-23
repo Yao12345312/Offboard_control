@@ -121,22 +121,43 @@ private:
             case 0:
                 handle_init_phase();
                 break;
-
-            case 1: // 穿圆环起点
+                
+             case 1: // 穿圆环终点
             
                 if (!hold_position_start_) {
                     hold_pisition_start_time_= this->now();
                     hold_position_start_ = true;
-                    publish_position(0.00, 0.00, 1.7);
+                    publish_position(0.0, 0.0, 1.4);
                     RCLCPP_INFO(this->get_logger(), "reach step 1");
+                } 
+                else 
+                {
+                    publish_position(0.0, 0.0, 1.4); 
+                    auto elapsed = this->now() - hold_pisition_start_time_;
+                    if (elapsed.seconds() >= 10.0) {
+                    RCLCPP_INFO(this->get_logger(), "go to step 2");
+                    step_ = 2;
+                    hold_position_start_ = false;  // 清除状态
+                    }
+                }
+                
+            break;    
+
+            case 2: // 穿圆环起点
+            
+                if (!hold_position_start_) {
+                    hold_pisition_start_time_= this->now();
+                    hold_position_start_ = true;
+                    publish_position(0.00, 0.00, 1.4);
+                    RCLCPP_INFO(this->get_logger(), "reach step 2");
                 } 
                 else 
                 {
                     double errx = offset_msg_.data[1];
                     // 还未确定相机x和实际x的关系
-                    if (!Ex_vision_fly_to_target(errx, 0, 0)) {
-                        RCLCPP_INFO(this->get_logger(), "go to step 2");
-                        step_ = 2;
+                    if (Ex_vision_fly_to_target(errx, 0.0, 1.4)) {
+                        RCLCPP_INFO(this->get_logger(), "go to step 3");
+                        step_ = 3;
                         ring_center_x = current_pose_.pose.position.x;
                         hold_position_start_ = false;  // 清除状态
                     }
@@ -145,38 +166,59 @@ private:
                 
             break;
 
-            case 2: // 穿圆环终点
+            case 3: // 穿圆环终点
             
                 if (!hold_position_start_) {
                     hold_pisition_start_time_= this->now();
                     hold_position_start_ = true;
-                    publish_position(ring_center_x, 3.00, 1.7);
-                    RCLCPP_INFO(this->get_logger(), "reach step 2");
+                    publish_position(ring_center_x, -1.50, 1.4);
+                    RCLCPP_INFO(this->get_logger(), "reach step 3");
                 } 
                 else 
                 {
-                    publish_position(ring_center_x, 3.00, 1.7); 
+                    publish_position(ring_center_x, -1.50, 1.4); 
                     auto elapsed = this->now() - hold_pisition_start_time_;
                     if (elapsed.seconds() >= 5.0) {
-                    RCLCPP_INFO(this->get_logger(), "go to step 3");
-                    step_ = 3;
+                    RCLCPP_INFO(this->get_logger(), "go to step 4");
+                    step_ = 4;
                     hold_position_start_ = false;  // 清除状态
                     }
                 }
                 
             break;
 
-            case 3: // 穿圆环终点
+            case 4: // 穿圆环终点
+            
+                if (!hold_position_start_) {
+                    hold_pisition_start_time_= this->now();
+                    hold_position_start_ = true;
+                    publish_position(ring_center_x, -3.00, 1.4);
+                    RCLCPP_INFO(this->get_logger(), "reach step 4");
+                } 
+                else 
+                {
+                    publish_position(ring_center_x, -3.00, 1.4); 
+                    auto elapsed = this->now() - hold_pisition_start_time_;
+                    if (elapsed.seconds() >= 5.0) {
+                    RCLCPP_INFO(this->get_logger(), "go to step 5");
+                    step_ = 5;
+                    hold_position_start_ = false;  // 清除状态
+                    }
+                }
+                
+            break;
+
+            case 5: // 穿圆环终点
             
                 if (!hold_position_start_) {
                 hold_pisition_start_time_ = this->now();
                 hold_position_start_ = true;
-                publish_position(ring_center_x, 0.00, 0.21);
+                publish_position(ring_center_x, -3.00, 0.17);
                     RCLCPP_INFO(this->get_logger(), "start step 19");
                 }
                 else { 
 
-                publish_position(ring_center_x, 0.00, 0.21);
+                publish_position(ring_center_x, -3.00, 0.17);
                 auto elapsed = this->now() - hold_pisition_start_time_;
 
                 if (elapsed.seconds() >= 8.0) {
@@ -288,7 +330,7 @@ private:
         } 
         else 
         { 
-	        return 0;
+	     return 0;
         }
     }
 
@@ -320,19 +362,18 @@ private:
     }
 
     bool Ex_vision_fly_to_target(double errx, double py, double pz) {
-        double tx = current_pose_.pose.position.x + errx; // 你可能需要根据实际需要来计算 tx
-        double dt = 0.02;
-        double px = pid_x_.compute(tx, current_pose_.pose.position.x, current_vel_.twist.linear.x, dt);
-        publish_position(px, py, pz);
+        double tx = current_pose_.pose.position.x - errx; // 你可能需要根据实际需要来计算 tx
+        publish_position(tx, py, pz);
         double dist_x = std::fabs(errx);
+        // ring_centre_x 可以用errx 最大值来存 缺点是误识别时会有较大问题
         
-        if (dist_x <= 0.1) 
+        if (dist_x <= 0.008 && errx != 0) 
         {
             return 1;
         } 
         else 
         { 
-	        return 0;
+	    return 0;
         }
 
     }
