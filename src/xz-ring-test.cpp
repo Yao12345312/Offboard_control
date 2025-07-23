@@ -132,7 +132,7 @@ private:
                 } 
                 else 
                 {
-                    double errx = offset_msg_.data[0];
+                    double errx = offset_msg_.data[1];
                     // 还未确定相机x和实际x的关系
                     if (!Ex_vision_fly_to_target(errx, 0, 0)) {
                         RCLCPP_INFO(this->get_logger(), "go to step 2");
