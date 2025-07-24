@@ -94,6 +94,10 @@ def generate_launch_description():
         #    name='tf_broadcaster_node',
         #    output='screen'
         #),
-        
+
+	#监听offboard完成后，关闭其他节点
+	Shutdown(
+            condition=launch.conditions.LaunchConfigurationEquals('offboard_node', 'done')  # 监听标记完成条件
+        )
 
     ])
