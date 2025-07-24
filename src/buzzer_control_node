@@ -11,7 +11,7 @@ class BuzzerController(Node):
         super().__init__('buzzer_controller')
 
         # 初始化 GPIO控制蜂鸣器（BCM 编号）
-        self.buzzer = OutputDevice(17) 
+        self.buzzer = OutputDevice(21) 
 
         # 创建订阅者
         self.subscription = self.create_subscription(
