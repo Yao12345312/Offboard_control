@@ -1,6 +1,38 @@
 #include "string.h" 
 #include "DMA_UART.h"
 
+/*
+调用模板：
+#include "DMA_UART.h"
+USART1_Config(115200);
+
+    while (1)
+    {
+        if (com1_recv_end_flag) // 有数据接收完成
+        {
+            com1_recv_end_flag = 0;
+
+            // 简单判断：如果接收到 "hello"，则回复 "world"
+            if (com1_rx_len >= 5 && strncmp((char*)com1_rx_buffer, "hello", 5) == 0)
+            {
+                const char *response = "world\r\n";
+                DMA_USART1_Send((uint8_t *)response, strlen(response));
+            }
+            else
+            {
+                // 回复收到的数据前缀
+                char echo_buf[64];
+                snprintf(echo_buf, sizeof(echo_buf), "Recv: %.*s\r\n", com1_rx_len, com1_rx_buffer);
+                DMA_USART1_Send((uint8_t *)echo_buf, strlen(echo_buf));
+            }
+
+            // 清空接收缓冲（非必须，但推荐）
+            memset(com1_rx_buffer, 0, sizeof(com1_rx_buffer));
+            com1_rx_len = 0;
+        }
+    }
+*/
+
 volatile uint16_t com1_rx_len = 0;  //接收帧数据的长度
 volatile uint8_t com1_recv_end_flag = 0; //帧数据接收完成标
 uint8_t com1_rx_buffer[USART_MAX_LEN]={0};//接收数据缓存
