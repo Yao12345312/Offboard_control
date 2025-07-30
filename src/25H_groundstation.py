@@ -1,6 +1,14 @@
+#!/usr/bin/env python3
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import String
 import matplotlib.pyplot as plt
 from collections import deque
 import math
+import os
+import serial
+import struct
+import time
 
 # 地图参数
 ROWS = 7
@@ -8,7 +16,6 @@ COLS = 9
 CELL_SIZE = 0.5
 DIRECTIONS = [(-1, 0), (1, 0), (0, -1), (0, 1)]
 
-# 生成格子编号
 cols_label = [f"A{i}" for i in range(1, COLS+1)]
 rows_label = [f"B{i}" for i in range(1, ROWS+1)]
 
@@ -16,14 +23,12 @@ def cell_to_coord(cell):
     if cell.startswith("A") and "B" in cell:
         a = int(cell[1:cell.index("B")])
         b = int(cell[cell.index("B")+1:])
-        # 地图左下角是 A1B1 → (B1 是第1行)，行数向上增长（index0 是 B1）
-        return b - 1, a - 1  # row, col
+        return b - 1, a - 1
     raise ValueError("非法格子编号")
 
 def coord_to_cell(r, c):
     return f"A{c+1}B{r+1}"
 
-# 生成地图
 def init_grid():
     return [[1]*COLS for _ in range(ROWS)]
 
@@ -88,7 +93,7 @@ def nearest_neighbor_path(start, points, grid):
         path.extend(return_path[1:])
     return path
 
-def draw(grid, path, obstacles):
+def draw(grid, path, obstacles, filename):
     fig, ax = plt.subplots(figsize=(10, 6))
     for r in range(ROWS):
         for c in range(COLS):
@@ -116,36 +121,108 @@ def draw(grid, path, obstacles):
     ax.set_title("Path Planning")
     ax.legend()
     plt.gca().invert_yaxis()
-    plt.show()
+    plt.savefig(filename, format='jpg')
+    plt.close()
 
-if __name__ == "__main__":
-    print("请输入三个连续禁飞格子（如：A3B4 A4B4 A5B4）：")
-    obstacle_cells = input("输入禁飞格子，用空格隔开: ").split()
-    grid = init_grid()
-    obstacles = []
+def send_image_to_screen(serial_port, filepath, savepath="ram/a.jpg"):
+    filesize = os.path.getsize(filepath)
+    cmd = f'twfile "{savepath}",{filesize}\r\n'.encode('utf-8')
+    ser = serial.Serial(serial_port, 115200, timeout=1)
+    ser.write(cmd)
+    response = ser.read_until(b"\xff")
+    if not response.endswith(b'\xfe\xff'):
+        print("⚠️ 无法进入透传状态，屏幕返回：", response)
+        ser.close()
+        return
 
-    try:
-        for oc in obstacle_cells:
-            r, c = cell_to_coord(oc)
-            if is_valid(r, c):
-                grid[r][c] = 0
-                obstacles.append((r, c))
-    except Exception as e:
-        print("输入错误:", e)
-        exit(1)
+    with open(filepath, 'rb') as f:
+        data = f.read()
 
-    start = cell_to_coord("A9B1")  # 固定起点：右下角 A9B1
-    points = [(r, c) for r in range(ROWS) for c in range(COLS) if grid[r][c] == 1]
+    chunk_size = 1024
+    packet_id = 0
+    offset = 0
+    while offset < len(data):
+        chunk = data[offset:offset + chunk_size]
+        packet_header = b"\x3a\xa1\xbb\x44\x7f\xff\xfe"  # 固定头
+        packet_header += b"\x00"  # 无校验
+        packet_header += struct.pack('<H', packet_id)
+        packet_header += struct.pack('<H', len(chunk))
+        packet = packet_header + chunk
+        ser.write(packet)
+        ack = ser.read(1)
+        if ack != b'\x05':
+            print(f"❌ 第 {packet_id} 包发送失败，重发")
+            continue
+        packet_id += 1
+        offset += len(chunk)
+        time.sleep(0.01)
 
-    path = nearest_neighbor_path(start, points, grid)
-    if len(path) < len(points):
-        print("⚠️ 有部分点无法到达（孤岛存在）")
-    print(f"路径共 {len(path)} 步，遍历率：{100*len(set(path))/len(points):.1f}%")
+    print("✅ 图片透传完成")
+    ser.close()
 
-    # 输出路径到文件
-    path_labels = [coord_to_cell(r, c) for r, c in path]
-    with open("path_plan.txt", "w") as f:
-        f.write(" -> ".join(path_labels))
-    print("路径已保存至 path_plan.txt")
+class GroundStationNode(Node):
+    def __init__(self):
+        super().__init__('ground_station_node')
+        self.subscription = self.create_subscription(
+            String,
+            '/read_screen_command',
+            self.serial_callback,
+            10)
+        self.publisher = self.create_publisher(String, '/grid_waypoint', 10)
+        self.command_buffer = []
+        self.last_command = None
+        self.serial_port = '/dev/ttyAMA3'  # 修改为串口屏端口
 
-    draw(grid, path, obstacles)
+    def serial_callback(self, msg):
+        command = msg.data.strip()
+        if command != self.last_command:
+            self.command_buffer.append(command)
+            self.last_command = command
+            self.get_logger().info(f"收到禁飞格: {command}")
+        if len(self.command_buffer) == 3:
+            self.get_logger().info(f"已接收3个禁飞格: {self.command_buffer}")
+            self.process_commands()
+            self.command_buffer = []
+            self.last_command = None
+
+    def process_commands(self):
+        grid = init_grid()
+        obstacles = []
+        try:
+            for oc in self.command_buffer:
+                r, c = cell_to_coord(oc)
+                if is_valid(r, c):
+                    grid[r][c] = 0
+                    obstacles.append((r, c))
+        except Exception as e:
+            self.get_logger().error(f"解析禁飞格出错: {e}")
+            return
+
+        start = cell_to_coord("A9B1")
+        points = [(r, c) for r in range(ROWS) for c in range(COLS) if grid[r][c] == 1]
+
+        path = nearest_neighbor_path(start, points, grid)
+        path_labels = [coord_to_cell(r, c) for r, c in path]
+
+        with open("path_plan.txt", "w") as f:
+            f.write(" -> ".join(path_labels))
+
+        self.publisher.publish(String(data=",".join(path_labels)))
+        self.get_logger().info(f"路径已发布，共 {len(path_labels)} 点")
+
+        image_path = "/home/delicers/Desktop/way_point_map.jpg"
+        draw(grid, path, obstacles, image_path)
+        self.get_logger().info(f"路径图已保存至 {image_path}")
+        send_image_to_screen(self.serial_port, image_path)
+
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = GroundStationNode()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
