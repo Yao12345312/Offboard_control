@@ -10,7 +10,7 @@ parser.add_argument('--xml_path', default='animals/Annotations', type=str, help=
 # 数据集的划分，地址选择自己数据下的ImageSets/Main
 parser.add_argument('--txt_path', default='animals/ImageSets/Main', type=str, help='output txt label path')
 opt = parser.parse_args()
-trainval_percent = 0.9  # 训练集和验证集所占比例。 这里没有划分测试集
+trainval_percent = 0.8  # 训练集和验证集所占比例。 这里没有划分测试集
 train_percent = 0.8  # 训练集所占比例，可自己进行调整
 xmlfilepath = opt.xml_path
 txtsavepath = opt.txt_path

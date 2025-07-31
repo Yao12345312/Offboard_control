@@ -46,3 +46,9 @@ head:
 
    [[17, 20, 23], 1, Detect, [nc, anchors]],  # Detect(P3, P4, P5)
   ]
+
+# YOLOv5 v6.0 loss weights
+loss_weights:
+  cls: 1.5  # 提高分类损失权重（孔雀vs背景）
+  obj: 1.0
+  box: 1.0
