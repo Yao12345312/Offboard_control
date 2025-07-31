@@ -5,7 +5,7 @@ python train.py --weights yolov5s.pt  --cfg animals/yolov5n.yaml  --data animals
 python export.py --weights animals/best.pt --img 640 --batch 1 --include onnx
 
 ## onnx转kmodel
-# 转换kmodel,onnx模型路径请自定义，生成的kmodel在onnx模型同级目录下
+### 转换kmodel,onnx模型路径请自定义，生成的kmodel在onnx模型同级目录下
 python to_kmodel.py --target k230 --model ./best.onnx --dataset ../test --input_width 640 --input_height 640 --ptq_option 0
 
 # 环境准备
@@ -20,17 +20,17 @@ onnxsim                      0.4.36
 
 模型转换需要在训练环境安装如下库：
 
-## linux平台：nncase和nncase-kpu可以在线安装，nncase-2.x 需要安装 dotnet-7
+### linux平台：nncase和nncase-kpu可以在线安装，nncase-2.x 需要安装 dotnet-7
 sudo apt-get install -y dotnet-sdk-7.0
 pip install --upgrade pip
 pip install nncase==2.9.0
 pip install nncase-kpu==2.9.0
 
-## windows平台：请自行安装dotnet-7并添加环境变量,支持使用pip在线安装nncase，但是nncase-kpu库需要离线安装，在https://github.com/kendryte/nncase/releases下载nncase_kpu-2.*-py2.py3-none-win_amd64.whl
-## 进入对应的python环境，在nncase_kpu-2.*-py2.py3-none-win_amd64.whl下载目录下使用pip安装
+### windows平台：请自行安装dotnet-7并添加环境变量,支持使用pip在线安装nncase，但是nncase-kpu库需要离线安装，在https://github.com/kendryte/nncase/releases下载nncase_kpu-2.*-py2.py3-none-win_amd64.whl
+### 进入对应的python环境，在nncase_kpu-2.*-py2.py3-none-win_amd64.whl下载目录下使用pip安装
 pip install nncase_kpu-2.*-py2.py3-none-win_amd64.whl
 
-## 除nncase和nncase-kpu外，脚本还用到的其他库包括：
+### 除nncase和nncase-kpu外，脚本还用到的其他库包括：
 pip install onnx
 pip install onnxruntime
 pip install onnxsim
