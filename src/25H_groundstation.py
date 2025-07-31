@@ -6,9 +6,9 @@ import matplotlib.pyplot as plt
 from collections import deque
 import math
 import os
-import serial
 import struct
 import time
+from PIL import Image
 
 # 地图参数
 ROWS = 7
@@ -93,8 +93,9 @@ def nearest_neighbor_path(start, points, grid):
         path.extend(return_path[1:])
     return path
 
-def draw(grid, path, obstacles, filename):
-    fig, ax = plt.subplots(figsize=(10, 6))
+def draw(grid, path, obstacles, filename_jpg):
+    temp_png = "/tmp/temp_path.png"
+    fig, ax = plt.subplots(figsize=(5, 3))  # 小画布尺寸
     for r in range(ROWS):
         for c in range(COLS):
             x, y = c * CELL_SIZE, (ROWS - 1 - r) * CELL_SIZE
@@ -121,44 +122,42 @@ def draw(grid, path, obstacles, filename):
     ax.set_title("Path Planning")
     ax.legend()
     plt.gca().invert_yaxis()
-    plt.savefig(filename, format='jpg')
+    plt.savefig(temp_png, dpi=80)  # 先保存为 png
     plt.close()
 
-def send_image_to_screen(serial_port, filepath, savepath="ram/a.jpg"):
+    # 用 Pillow 再次压缩成 jpg
+    img = Image.open(temp_png)
+    img = img.convert("RGB")
+    img.save(filename_jpg, "JPEG", quality=50, optimize=True)
+
+def send_image_to_screen(publisher, filepath, savepath=r"ram/a.jpg"):
     filesize = os.path.getsize(filepath)
-    cmd = f'twfile "{savepath}",{filesize}\r\n'.encode('utf-8')
-    ser = serial.Serial(serial_port, 115200, timeout=1)
-    ser.write(cmd)
-    response = ser.read_until(b"\xff")
-    if not response.endswith(b'\xfe\xff'):
-        print("⚠️ 无法进入透传状态，屏幕返回：", response)
-        ser.close()
-        return
+    cmd = f'twfile "{savepath}",{filesize}\r\n'
+    publisher.publish(String(data=cmd))
+    time.sleep(0.3)
 
     with open(filepath, 'rb') as f:
         data = f.read()
 
-    chunk_size = 1024
+    chunk_size = 128  # 调小以提高可靠性
     packet_id = 0
     offset = 0
+
     while offset < len(data):
         chunk = data[offset:offset + chunk_size]
-        packet_header = b"\x3a\xa1\xbb\x44\x7f\xff\xfe"  # 固定头
-        packet_header += b"\x00"  # 无校验
-        packet_header += struct.pack('<H', packet_id)
-        packet_header += struct.pack('<H', len(chunk))
-        packet = packet_header + chunk
-        ser.write(packet)
-        ack = ser.read(1)
-        if ack != b'\x05':
-            print(f"❌ 第 {packet_id} 包发送失败，重发")
-            continue
-        packet_id += 1
+        header = b"\x3a\xa1\xbb\x44\x7f\xff\xfe"
+        header += b"\x00"  # 无校验
+        header += struct.pack('<H', packet_id)
+        header += struct.pack('<H', len(chunk))
+        packet = header + chunk
+        hex_str = packet.hex()
+        publisher.publish(String(data=hex_str))
         offset += len(chunk)
+        packet_id += 1
         time.sleep(0.01)
 
-    print("✅ 图片透传完成")
-    ser.close()
+    # 结束透传（强制结束包）
+    publisher.publish(String(data="3aa1bb447ffffe00ffff0000"))
 
 class GroundStationNode(Node):
     def __init__(self):
@@ -169,9 +168,9 @@ class GroundStationNode(Node):
             self.serial_callback,
             10)
         self.publisher = self.create_publisher(String, '/grid_waypoint', 10)
+        self.serial_cmd_publisher = self.create_publisher(String, '/serial_screen_command', 10)
         self.command_buffer = []
         self.last_command = None
-        self.serial_port = '/dev/ttyAMA3'  # 修改为串口屏端口
 
     def serial_callback(self, msg):
         command = msg.data.strip()
@@ -210,12 +209,10 @@ class GroundStationNode(Node):
         self.publisher.publish(String(data=",".join(path_labels)))
         self.get_logger().info(f"路径已发布，共 {len(path_labels)} 点")
 
-        image_path = "/home/delicers/Desktop/way_point_map.jpg"
+        image_path = r"/home/delicers/Desktop/way_point_map.jpg"
         draw(grid, path, obstacles, image_path)
         self.get_logger().info(f"路径图已保存至 {image_path}")
-        send_image_to_screen(self.serial_port, image_path)
-
-
+        send_image_to_screen(self.serial_cmd_publisher, image_path)
 
 def main(args=None):
     rclpy.init(args=args)
