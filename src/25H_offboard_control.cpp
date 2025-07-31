@@ -167,7 +167,7 @@ private:
                     auto pos = get_position_from_label("A9B1");
                     publish_position(std::get<0>(pos), std::get<1>(pos), std::get<2>(pos));
                     auto elapsed = this->now() - hold_pisition_start_time_;
-                    if (elapsed.seconds() >= 1.0) {
+                    if (elapsed.seconds() >= 3.0) {
                         step_ = 2;
                         hold_position_start_ = false;
                         RCLCPP_INFO(this->get_logger(), "Start mission, fly to waypoints...");
@@ -190,7 +190,8 @@ private:
                     } else {
                         publish_position(px, py, pz);
                         auto elapsed = this->now() - hold_pisition_start_time_;
-                        if (elapsed.seconds() >= 2.0) {
+                        control_laser_pointer(1,2.0);
+                        if (elapsed.seconds() >= 3.0) {
                             current_waypoint_index_++;
                             hold_position_start_ = false;
                             RCLCPP_INFO(this->get_logger(), "Reached waypoint: %s, moving to next...", label.c_str());
@@ -216,7 +217,7 @@ private:
                     } else {
                         publish_position(px, py, pz);
                         auto elapsed = this->now() - hold_pisition_start_time_;
-                        if (elapsed.seconds() >= 5.0) {
+                        if (elapsed.seconds() >= 3.0) {
                             step_ = 4;
                             hold_position_start_ = false;
                             RCLCPP_INFO(this->get_logger(), "Ready to land...");
@@ -239,7 +240,7 @@ private:
                 } else {
                     publish_position(px, py, 0.2);
                     auto elapsed = this->now() - hold_pisition_start_time_;
-                    if (elapsed.seconds() >= 6.0) {
+                    if (elapsed.seconds() >= 3.0) {
                         auto arm_req = std::make_shared<mavros_msgs::srv::CommandBool::Request>();
                         arm_req->value = false;
                         arming_client_->async_send_request(arm_req);
@@ -327,7 +328,22 @@ private:
         raw_pub_->publish(message);
     }
 
-    // ...（辅助函数略）...
+    void control_laser_pointer(int flag,int time) {
+        auto message = std_msgs::msg::Float64MultiArray();
+
+        // 激光状态 1 表示点亮，0 表示熄灭
+        message.data.push_back(flag);
+
+        // 激光点亮的时间
+        message.data.push_back(time);  
+
+        // 发布消息
+        laser_pointer_pub_->publish(message);
+   
+    RCLCPP_INFO(this->get_logger(), "laser pointer on");
+}
+
+    // 
 
     int step_;
     int flag_;
