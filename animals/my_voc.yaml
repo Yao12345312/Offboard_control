@@ -1,0 +1,9 @@
+test: animals\dataSet_path\test.txt
+train: animals\dataSet_path\train.txt
+val: animals\dataSet_path\val.txt
+ 
+# number of classes
+nc: 5
+ 
+# class names
+names: ["elephant","peacock","monkey","tiger","wolf"]
