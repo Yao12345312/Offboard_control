@@ -1,7 +1,7 @@
 #!/usr/bin/env python3    
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
+from std_msgs.msg import Int32  # 改为使用Int32消息类型
 from geometry_msgs.msg import Point
 import serial
 import re
@@ -24,8 +24,8 @@ class K230SerialNode(Node):
         # 串口初始化
         self.serial_port = self.init_serial('/dev/ttyAMA1', 115200)
         
-        # 创建ROS发布器
-        self.class_pub = self.create_publisher(String, '/k230/class_info', 10)  # 发布(id,name)对
+        # 创建ROS发布器 - 改为使用Int32类型
+        self.class_pub = self.create_publisher(Int32, '/k230/class_info', 10)  # 发布整数ID
         self.point_pub = self.create_publisher(Point, '/k230/position', 10)    # 发布坐标
         
         # 启动串口读取线程
@@ -71,25 +71,26 @@ class K230SerialNode(Node):
             self.get_logger().warn(f"无效数据格式: {data}")
 
     def publish_messages(self, class_id, x, y):
-        """发布组合消息"""
-        # 处理类别信息
-        class_name = self.class_map.get(class_id, f"unknown_{class_id}")
-        class_data = {
-            "class_id": class_id,
-            "class_name": class_name
-        }
-        
-        # 发布类别组合信息(JSON格式)
-        class_msg = String()
-        class_msg.data = json.dumps(class_data)  # 序列化为JSON字符串
+        # 发布类别ID(整数)
+        class_msg = Int32()
+        class_msg.data = class_id
         self.class_pub.publish(class_msg)
+        
+        center_x = 640
+        center_y = 360
+        
+        offset_x = float(x) - center_x
+        offset_y = float(y) - center_y
         
         # 发布坐标信息
         point_msg = Point()
-        point_msg.x = float(x)
-        point_msg.y = float(y)
+        point_msg.x = offset_x
+        point_msg.y = offset_y
         point_msg.z = 0.0  # 2D坐标
         self.point_pub.publish(point_msg)
+        
+        # 获取类别名称用于日志
+        class_name = self.class_map.get(class_id, "unknown")
         
         # 打印调试信息
         self.get_logger().info(
