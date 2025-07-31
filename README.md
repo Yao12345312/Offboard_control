@@ -5,7 +5,7 @@ python train.py --weights yolov5s.pt  --cfg animals/yolov5n.yaml  --data animals
 python export.py --weights animals/best.pt --img 640 --batch 1 --include onnx
 
 ## onnx转kmodel
-### 转换kmodel,onnx模型路径请自定义，生成的kmodel在onnx模型同级目录下
+#### 转换kmodel,onnx模型路径请自定义，生成的kmodel在onnx模型同级目录下
 python to_kmodel.py --target k230 --model ./best.onnx --dataset ../test --input_width 640 --input_height 640 --ptq_option 0
 
 # 环境准备
