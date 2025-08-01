@@ -80,6 +80,21 @@ public:
                 parse_waypoints(msg->data);
             });
 
+        k230_class_subscription_ = this->create_subscription<std_msgs::msg::Int32>(
+            "/k230/class_info",
+            rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_sensor_data)).best_effort(),
+            [this](const std_msgs::msg::Int32::SharedPtr msg) {
+                class_id = msg->data;
+            });
+        
+        k230_pos_subscription_ = this->create_subscription<geometry_msgs::msg::Point>(
+            "/k230/position",
+            rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_sensor_data)).best_effort(),
+            [this](const geometry_msgs::msg::Point::SharedPtr msg) {
+                offset_x = msg->x;
+                offset_y = msg->y;
+            });
+
         raw_pub_ = this->create_publisher<mavros_msgs::msg::PositionTarget>(
             "mavros/setpoint_raw/local", 10);
 
@@ -190,6 +205,7 @@ private:
                     } else {
                         publish_position(px, py, pz);
                         auto elapsed = this->now() - hold_pisition_start_time_;
+                        k230_class(class_id);
                         control_laser_pointer(1,2.0);
                         if (elapsed.seconds() >= 3.0) {
                             current_waypoint_index_++;
@@ -340,14 +356,62 @@ private:
         // 发布消息
         laser_pointer_pub_->publish(message);
    
-    RCLCPP_INFO(this->get_logger(), "laser pointer on");
-}
+        RCLCPP_INFO(this->get_logger(), "laser pointer on");
+    }
 
-    // 
+    void k230_class(int class_id) {
+        // 定义 class_map
+        static const std::unordered_map<int, std::string> class_map = {
+            {0, "elephant"},
+            {1, "peacock"},
+            {2, "monkey"},
+            {3, "tiger"},
+            {4, "wolf"}
+        };
+
+        // 查找 class_id 对应的类别名称
+        auto it = class_map.find(class_id);
+        if (it != class_map.end()) {
+            std::string class_name = it->second;
+
+            // 创建并发布 String 消息
+            auto msg = std_msgs::msg::String();
+            msg.data = class_name;
+            serial_screen_pub_->publish(msg);
+
+            // 打印日志
+            RCLCPP_INFO(this->get_logger(), "Class ID: %d -> Class Name: %s", class_id, class_name.c_str());
+        } else {
+            RCLCPP_WARN(this->get_logger(), "Unknown class ID: %d", class_id);
+        }
+    }
+
+    bool Ex_vision_fly_to_target(double errx, double erry, double pz) {
+        double tx = current_pose_.pose.position.x - errx; // 你可能需要根据实际需要来计算 tx
+        double ty = current_pose_.pose.position.y - erry; 
+        publish_position(tx, ty, pz);
+        double dist_x = std::fabs(errx);
+        double dist_y = std::fabs(erry);
+        // ring_centre_x 可以用errx 最大值来存 缺点是误识别时会有较大问题
+        
+        if (dist_x <= 0.008 && dist_y <= 0.008 && errx != 0) 
+        {
+            return 1;
+        } 
+        else 
+        { 
+	        return 0;
+        }
+
+    }
+
 
     int step_;
     int flag_;
     int finish_task2_;
+    float offset_x;
+    float offset_y;
+    int class_id;
     rclcpp::Time last_request_time_;
     rclcpp::Time start_time_;
     rclcpp::Time hold_pisition_start_time_;
@@ -361,6 +425,8 @@ private:
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr pose_sub_;
     rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr vel_sub_;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr way_point_subscription_;
+    rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr k230_class_subscription_;
+    rclcpp::Subscription<geometry_msgs::msg::Point>::SharedPtr k230_pos_subscription_;
     rclcpp::Publisher<mavros_msgs::msg::PositionTarget>::SharedPtr raw_pub_;
     rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr laser_pointer_pub_;
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr serial_screen_pub_;
@@ -370,6 +436,13 @@ private:
     std::vector<std::string> waypoint_sequence_;
     size_t current_waypoint_index_ = 0;
     std::string qr_data_;
+    std::unordered_map<int, std::string> class_map = {
+        {0, "elephant"},
+        {1, "peacock"},
+        {2, "monkey"},
+        {3, "tiger"},
+        {4, "wolf"}
+    };
 };
 
 int main(int argc, char** argv) {
