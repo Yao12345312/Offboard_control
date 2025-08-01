@@ -221,7 +221,7 @@ private:
                             RCLCPP_INFO(this->get_logger(), "no found animal");
                         }    
                         control_laser_pointer(1,2.0);
-                        if (elapsed.seconds() >= 3.0) {
+                        if (elapsed.seconds() >= 3.5) {
                             current_waypoint_index_++;
                             hold_position_start_ = false;
                             RCLCPP_INFO(this->get_logger(), "Reached waypoint: %s, moving to next...", label.c_str());
@@ -247,7 +247,7 @@ private:
                     } else {
                         publish_position(px, py, pz);
                         auto elapsed = this->now() - hold_pisition_start_time_;
-                        if (elapsed.seconds() >= 3.0) {
+                        if (elapsed.seconds() >= 3.5) {
                             step_ = 4;
                             hold_position_start_ = false;
                             RCLCPP_INFO(this->get_logger(), "Ready to land...");
