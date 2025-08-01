@@ -95,6 +95,13 @@ public:
                 offset_y = msg->y;
             });
 
+        k230_num_subscription_ = this->create_subscription<std_msgs::msg::Int32>(
+            "/k230/count",
+            rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_sensor_data)).best_effort(),
+            [this](const std_msgs::msg::Int32::SharedPtr msg) {
+                k230_num = msg->data;
+            });
+
         raw_pub_ = this->create_publisher<mavros_msgs::msg::PositionTarget>(
             "mavros/setpoint_raw/local", 10);
 
@@ -205,7 +212,14 @@ private:
                     } else {
                         publish_position(px, py, pz);
                         auto elapsed = this->now() - hold_pisition_start_time_;
-                        k230_class(class_id);
+                        if(class_id==0 || class_id==1 ||class_id==2||class_id==3||class_id==4)
+                            {
+                            k230_class(class_id,label);
+                            RCLCPP_INFO(this->get_logger(), "find animal");
+                            }
+                        else{
+                            RCLCPP_INFO(this->get_logger(), "no found animal");
+                        }    
                         control_laser_pointer(1,2.0);
                         if (elapsed.seconds() >= 3.0) {
                             current_waypoint_index_++;
@@ -359,7 +373,7 @@ private:
         RCLCPP_INFO(this->get_logger(), "laser pointer on");
     }
 
-    void k230_class(int class_id) {
+    void k230_class(int class_id,const std::string& label) {
         // 定义 class_map
         static const std::unordered_map<int, std::string> class_map = {
             {0, "elephant"},
@@ -368,22 +382,27 @@ private:
             {3, "tiger"},
             {4, "wolf"}
         };
-
+        std::string class_name = "unknown";
         // 查找 class_id 对应的类别名称
         auto it = class_map.find(class_id);
-        if (it != class_map.end()) {
-            std::string class_name = it->second;
+            if (it != class_map.end()) {  // 检查是否找到
+            class_name = it->second;
+            }
+            // 创建并发布动物名称
+            auto id_msg = std_msgs::msg::String();
+            id_msg.data ="page1.t"+ std::to_string(send_to_screen_count) +".txt=\"" + class_name + "\"";
+            serial_screen_pub_->publish(id_msg);
+            send_to_screen_count++;
 
-            // 创建并发布 String 消息
-            auto msg = std_msgs::msg::String();
-            msg.data = class_name;
-            serial_screen_pub_->publish(msg);
+            auto num_msg = std_msgs::msg::String();
+            num_msg.data="page1.t"+ std::to_string(send_to_screen_count) +".txt=\"" + std::to_string(k230_num) + "\"";
+            serial_screen_pub_->publish(num_msg);
+            send_to_screen_count++;
 
-            // 打印日志
-            RCLCPP_INFO(this->get_logger(), "Class ID: %d -> Class Name: %s", class_id, class_name.c_str());
-        } else {
-            RCLCPP_WARN(this->get_logger(), "Unknown class ID: %d", class_id);
-        }
+            auto pos_msg = std_msgs::msg::String();
+            pos_msg.data="page1.t"+ std::to_string(send_to_screen_count) +".txt=\"" + label + "\"";
+            serial_screen_pub_->publish(pos_msg);
+            send_to_screen_count++;
     }
 
     bool Ex_vision_fly_to_target(double errx, double erry, double pz) {
@@ -412,6 +431,9 @@ private:
     float offset_x;
     float offset_y;
     int class_id;
+    int send_to_screen_count=1;
+    int k230_num;
+
     rclcpp::Time last_request_time_;
     rclcpp::Time start_time_;
     rclcpp::Time hold_pisition_start_time_;
@@ -427,6 +449,7 @@ private:
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr way_point_subscription_;
     rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr k230_class_subscription_;
     rclcpp::Subscription<geometry_msgs::msg::Point>::SharedPtr k230_pos_subscription_;
+    rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr k230_num_subscription_;
     rclcpp::Publisher<mavros_msgs::msg::PositionTarget>::SharedPtr raw_pub_;
     rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr laser_pointer_pub_;
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr serial_screen_pub_;
@@ -436,13 +459,7 @@ private:
     std::vector<std::string> waypoint_sequence_;
     size_t current_waypoint_index_ = 0;
     std::string qr_data_;
-    std::unordered_map<int, std::string> class_map = {
-        {0, "elephant"},
-        {1, "peacock"},
-        {2, "monkey"},
-        {3, "tiger"},
-        {4, "wolf"}
-    };
+   
 };
 
 int main(int argc, char** argv) {
