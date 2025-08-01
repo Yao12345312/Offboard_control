@@ -93,10 +93,11 @@ class K230SerialNode(Node):
         # 获取类别名称用于日志
         class_name = self.class_map.get(class_id, "unknown")
         
-        # 打印调试信息
-        self.get_logger().info(
-            f"发布: 类别=({class_id},{class_name}) 位置=({x},{y}) 检测数量={count}",
-            throttle_duration_sec=1
+        if class_id != 5:
+            # 打印调试信息
+            self.get_logger().info(
+                f"发布: 类别=({class_id},{class_name}) 位置=({x},{y}) 检测数量={count}",
+                throttle_duration_sec=1
         )
 
 def main(args=None):

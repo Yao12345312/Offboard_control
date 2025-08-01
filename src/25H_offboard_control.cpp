@@ -370,7 +370,7 @@ private:
         // 发布消息
         laser_pointer_pub_->publish(message);
    
-        RCLCPP_INFO(this->get_logger(), "laser pointer on");
+        // RCLCPP_INFO(this->get_logger(), "laser pointer on");
     }
 
     void k230_class(int class_id,const std::string& label) {
