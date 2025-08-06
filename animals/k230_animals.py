@@ -22,17 +22,18 @@ if __name__=="__main__":
         display_size=[1920,1080]
     else:
         display_size=[800,480]
-    kmodel_path="/data/best.kmodel"
+    kmodel_path="/data/green_best.kmodel"
     labels = ["elephant","peacock","monkey","tiger","wolf"]
     confidence_threshold = 0.85
-    nms_threshold=0.45
+    nms_threshold=0.30
     model_input_size=[640,640]
     # 初始化PipeLine
     pl=PipeLine(rgb888p_size=rgb888p_size,display_size=display_size,display_mode=display_mode)
     pl.create(hmirror=True,vflip=True)
     # 初始化YOLOv5实例
-    yolo=YOLOv5(task_type="detect",mode="video",kmodel_path=kmodel_path,labels=labels,rgb888p_size=rgb888p_size,model_input_size=model_input_size,display_size=display_size,conf_thresh=confidence_threshold,nms_thresh=nms_threshold,max_boxes_num=20,debug_mode=0)
+    yolo=YOLOv5(task_type="detect",mode="video",kmodel_path=kmodel_path,labels=labels,rgb888p_size=rgb888p_size,model_input_size=model_input_size,display_size=display_size,conf_thresh=confidence_threshold,nms_thresh=nms_threshold,max_boxes_num=3,debug_mode=0)
     yolo.config_preprocess()
+
     try:
         while True:
             os.exitpoint()
@@ -40,16 +41,24 @@ if __name__=="__main__":
                 # 逐帧推理
                 img=pl.get_frame()
                 res=yolo.run(img)
-                yolo.draw_result(res,pl.osd_img)
+                #yolo.draw_result(res,pl.osd_img)
                 pl.show_image()
-                # 处理检测结果并发送到串口
+
+                # 初始化检测标志
+                has_detection = False
+
                 if res and len(res) == 3:  # 确保res有3个元素
                     bboxes = res[0]  # 边界框数组列表
                     class_ids = res[1]  # 类别ID列表
                     confidences = res[2]  # 置信度列表
 
-                    # 遍历所有检测到的对象
-                    for i in range(len(bboxes)):
+                    # 统计每个类别出现的次数
+                    class_counts = {i:0 for i in range(len(labels))}
+                    for class_id in class_ids:
+                        class_counts[class_id] += 1
+
+                    # 遍历所有检测到的对象(最多3个)
+                    for i in range(min(len(bboxes), 3)):
                         bbox = bboxes[i]  # 获取边界框
                         class_id = class_ids[i]  # 获取类别ID
                         confidence = confidences[i]  # 获取置信度
@@ -61,12 +70,17 @@ if __name__=="__main__":
                         center_x = (x1 + x2) / 2
                         center_y = (y1 + y2) / 2
 
-                        # 获取类别名称
-                        class_name = labels[class_id]
+                        # 设置检测标志
+                        has_detection = True
 
                         # 构造输出字符串
-                        output_str = f"C{class_id}X{int(center_x)}Y{int(center_y)}\n"
+                        output_str = f"C{class_id}X{int(center_x)}Y{int(center_y)}N{class_counts[class_id]}\n"
                         u2.write(output_str)
+
+                # 如果没有检测到任何对象，持续发送C5X0Y0N0
+                if not has_detection:
+                    u2.write("C5X0Y0N0\n")
+
                 gc.collect()
 
     except Exception as e:
