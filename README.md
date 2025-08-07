@@ -19,7 +19,7 @@
 
 ### 开机自启动服务设置
 **设置自启动后，可以取消程序中自动切换offboard模式的注释，PX4修改对应参数，无需遥控器起飞**
-开启开机自启动tracked2vision
+开启开机自启动tracked2vision.launch.py
 ```
 sudo systemctl enable my_auto_boot.service
 ```
