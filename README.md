@@ -1,3 +1,20 @@
+|  配件   | 选型  |
+|  ----  | ----  |
+| 飞控  | 微空H743 |
+| 电调  | 微空蓝鸟四合一电调60A |
+| 电机  | 朗宇三代X2216 |
+| 机架  | HSKRC Q4 |
+| 脚架  | 6061铝管 |
+| 桨叶  | 8045GF乾丰碳纤尼龙桨 |
+| 接收机+遥控  | 富斯ia6B+i6x |
+| 激光雷达  | 镭神N10/N10P |
+| 机载电脑  | 树莓派5 |
+| 机载电脑供电  | 5V5A供电稳压模块P23C |
+| 视觉模块  | K230/USB摄像头+opencv |
+
+系统环境：PX4 1.14.3+Ubuntu24.04+ROS2jazzy
+
+
 开启开机自启动tracked2vision
 ```
 sudo systemctl enable my_auto_boot.service
