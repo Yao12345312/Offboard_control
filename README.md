@@ -62,3 +62,6 @@ uart5  ->  uart4-pi5,  即  /dev/ttyAMA5 -> /dev/ttyAMA4
 ```
 <img width="887" height="791" alt="3569f2a5b7e9786ca6e9d7693fdce94" src="https://github.com/user-attachments/assets/c6251606-8598-465a-8a94-9a912aa1e73c" />
 <img width="814" height="267" alt="4f901b40965be35f5d96909f9de6946" src="https://github.com/user-attachments/assets/ae255c6f-bdb9-41d7-8312-2cb4f13ebfa1" />
+
+## 注意事项
+
