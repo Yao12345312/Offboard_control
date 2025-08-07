@@ -17,7 +17,7 @@
 #include "std_msgs/msg/string.hpp"
 #include "std_msgs/msg/float64.hpp"
 #include "std_msgs/msg/float64_multi_array.hpp"
-
+#include "std_msgs/msg/bool.hpp"
 using namespace std::chrono_literals;
 
 class PID {
@@ -109,6 +109,8 @@ public:
 
         serial_screen_pub_ = this->create_publisher<std_msgs::msg::String>("/serial_screen_command", 10);
 
+        led_publisher_ = this->create_publisher<std_msgs::msg::Bool>("/led_shine", 10);
+
         set_mode_client_ = this->create_client<mavros_msgs::srv::SetMode>("mavros/set_mode");
 
         arming_client_ = this->create_client<mavros_msgs::srv::CommandBool>("mavros/cmd/arming");
@@ -127,18 +129,18 @@ private:
     // 由编号自动计算坐标，不再使用字典
     std::tuple<double, double, double> get_position_from_label(const std::string& label) {
         // 格式必须为A{num}B{num}
-        if (label.size() < 4 || label[0] != 'A') return std::make_tuple(0.0, 0.0, 1.2);
+        if (label.size() < 4 || label[0] != 'A') return std::make_tuple(0.0, 0.0, 1.25);
 
         size_t posB = label.find('B');
-        if (posB == std::string::npos) return std::make_tuple(0.0, 0.0, 1.2);
+        if (posB == std::string::npos) return std::make_tuple(0.0, 0.0, 1.25);
 
         int a_num = std::stoi(label.substr(1, posB-1));
         int b_num = std::stoi(label.substr(posB+1));
-        if (a_num < 1 || a_num > 9 || b_num < 1 || b_num > 7) return std::make_tuple(0.0, 0.0, 1.2);
+        if (a_num < 1 || a_num > 9 || b_num < 1 || b_num > 7) return std::make_tuple(0.0, 0.0, 1.25);
 
         double x = (b_num - 1) * 0.5;
         double y = (9 - a_num) * 0.5;
-        double z = 1.2;
+        double z = 1.25;
         return std::make_tuple(x, y, z);
     }
 
@@ -168,9 +170,11 @@ private:
         if (!current_state_.connected) return;
         switch (step_) {
             case 0:
+            	publishLEDCommand(1);
                 handle_init_phase();
                 break;
             case 1:
+            	publishLEDCommand(0);
                 // 起飞，直接到第一个航点
                 if (waypoint_sequence_.empty()) {
                     RCLCPP_WARN(this->get_logger(), "No waypoints set, aborting mission.");
@@ -197,89 +201,103 @@ private:
                 }
                 break;
             case 2:
-                // 遍历所有航点
-                if (current_waypoint_index_ < waypoint_sequence_.size()) {
-                    const std::string& label = waypoint_sequence_[current_waypoint_index_];
-                    auto pos = get_position_from_label(label);
-                    double px = std::get<0>(pos);
-                    double py = std::get<1>(pos);
-                    double pz = std::get<2>(pos);
-                    if (!hold_position_start_) {
-                        hold_pisition_start_time_ = this->now();
-                        hold_position_start_ = true;
-                        publish_position(px, py, pz);
-                        RCLCPP_INFO(this->get_logger(), "Flying to waypoint: %s (%.2f, %.2f, %.2f)", label.c_str(), px, py, pz);
-                    } else {
-                        publish_position(px, py, pz);
-                        auto elapsed = this->now() - hold_pisition_start_time_;
-                        if(class_id==0 || class_id==1 ||class_id==2||class_id==3||class_id==4)
-                            {
-                            k230_class(class_id,label);
-                            RCLCPP_INFO(this->get_logger(), "find animal");
-                            }
-                        else{
-                            RCLCPP_INFO(this->get_logger(), "no found animal");
-                        }    
-                        control_laser_pointer(1,2.0);
-                        if (elapsed.seconds() >= 3.5) {
-                            current_waypoint_index_++;
-                            hold_position_start_ = false;
-                            RCLCPP_INFO(this->get_logger(), "Reached waypoint: %s, moving to next...", label.c_str());
-                        }
-                    }
-                } else {
+    if (current_waypoint_index_ < waypoint_sequence_.size() - 1) {
+        // 正常航点导航（不包括最后一个点）
+        const std::string& label = waypoint_sequence_[current_waypoint_index_];
+        auto pos = get_position_from_label(label);
+        double px = std::get<0>(pos);
+        double py = std::get<1>(pos);
+        double pz = std::get<2>(pos);
+        if (!hold_position_start_) {
+            hold_pisition_start_time_ = this->now();
+            hold_position_start_ = true;
+            publish_position(px, py, pz);
+            RCLCPP_INFO(this->get_logger(), "Flying to waypoint: %s (%.2f, %.2f, %.2f)", label.c_str(), px, py, pz);
+        } else {
+            publish_position(px, py, pz);
+            auto elapsed = this->now() - hold_pisition_start_time_;
+            if (class_id==0 || class_id==1 ||class_id==2||class_id==3||class_id==4) {
+                k230_get_animal=true;
+                k230_class(class_id, label, send_to_screen_count1, send_to_screen_count2, send_to_screen_count3);
+                RCLCPP_INFO(this->get_logger(), "find animal");
+            } else {
+                RCLCPP_INFO(this->get_logger(), "no found animal");
+            }
+            control_laser_pointer(1, 2.0);
+            if (elapsed.seconds() >= 3.5) {
+                current_waypoint_index_++;
+                if(k230_get_animal)
+                {
+                send_to_screen_count1 += 3;
+                send_to_screen_count2 += 3;
+                send_to_screen_count3 += 3;
+                k230_get_animal=false;
+                }
+                
+                hold_position_start_ = false;
+                RCLCPP_INFO(this->get_logger(), "Reached waypoint: %s, moving to next...", label.c_str());
+
+                // 如果刚完成倒数第二个点，进入下降阶段
+                if (current_waypoint_index_ == waypoint_sequence_.size() - 1) {
                     step_ = 3;
-                    hold_position_start_ = false;
                 }
-                break;
-            case 3:
-                // 飞到最后一个点悬停5秒
-                if (!waypoint_sequence_.empty()) {
-                    auto pos = get_position_from_label(waypoint_sequence_.back());
-                    double px = std::get<0>(pos);
-                    double py = std::get<1>(pos);
-                    double pz = std::get<2>(pos);
-                    if (!hold_position_start_) {
-                        hold_pisition_start_time_ = this->now();
-                        hold_position_start_ = true;
-                        publish_position(px, py, pz);
-                        RCLCPP_INFO(this->get_logger(), "Arrived at final waypoint: %s (%.2f, %.2f, %.2f)", waypoint_sequence_.back().c_str(), px, py, pz);
-                    } else {
-                        publish_position(px, py, pz);
-                        auto elapsed = this->now() - hold_pisition_start_time_;
-                        if (elapsed.seconds() >= 3.5) {
-                            step_ = 4;
-                            hold_position_start_ = false;
-                            RCLCPP_INFO(this->get_logger(), "Ready to land...");
-                        }
-                    }
-                } else {
-                    step_ = 4;
-                }
-                break;
-            case 4:
-                // 降落到A9B1 (起飞点)
-                auto pos = get_position_from_label("A9B1");
-                double px = std::get<0>(pos);
-                double py = std::get<1>(pos);
-                if (!hold_position_start_) {
-                    hold_pisition_start_time_ = this->now();
-                    hold_position_start_ = true;
-                    publish_position(px, py, 0.2);
-                    RCLCPP_INFO(this->get_logger(), "Landing at (%.2f, %.2f, 0.2)", px, py);
-                } else {
-                    publish_position(px, py, 0.2);
-                    auto elapsed = this->now() - hold_pisition_start_time_;
-                    if (elapsed.seconds() >= 3.0) {
-                        auto arm_req = std::make_shared<mavros_msgs::srv::CommandBool::Request>();
-                        arm_req->value = false;
-                        arming_client_->async_send_request(arm_req);
-                        rclcpp::sleep_for(std::chrono::seconds(3));
-                        RCLCPP_INFO(this->get_logger(), "Disarm request sent. Mission complete.");
-                        rclcpp::shutdown();
-                    }
-                }
-                break;
+            }
+        }
+    } else {
+        // 不应进入此分支，保险处理
+        step_ = 4;
+        hold_position_start_ = false;
+    }
+    break;
+
+case 3:
+    // 中间过渡：在倒数第二点原地下降到 0.7m
+    if (!hold_position_start_) {
+        hold_pisition_start_time_ = this->now();
+        hold_position_start_ = true;
+        const std::string& label = waypoint_sequence_[waypoint_sequence_.size() - 2];
+        auto pos = get_position_from_label(label);
+        publish_position(std::get<0>(pos), std::get<1>(pos), 0.7);
+        
+        RCLCPP_INFO(this->get_logger(), "Descending at waypoint %s to 0.5m...", label.c_str());
+    } else {
+        const std::string& label = waypoint_sequence_[waypoint_sequence_.size() - 2];
+        auto pos = get_position_from_label(label);
+        publish_position(std::get<0>(pos), std::get<1>(pos), 0.7);
+        auto elapsed = this->now() - hold_pisition_start_time_;
+        if (elapsed.seconds() >= 3.0) {
+            step_ = 4;
+            hold_position_start_ = false;
+            publishLEDCommand(1);
+            RCLCPP_INFO(this->get_logger(), "Reached 0.5m, preparing to fly to final waypoint at 0.2m...");
+        }
+    }
+    break;
+
+case 4:
+    // 最后一个点（A9B1），目标高度为 0.2，实现斜着飞过去
+    auto pos = get_position_from_label("A9B1");
+    double px = std::get<0>(pos);
+    double py = std::get<1>(pos);
+    if (!hold_position_start_) {
+        hold_pisition_start_time_ = this->now();
+        hold_position_start_ = true;
+        publish_position(px, py, 0.17);
+        RCLCPP_INFO(this->get_logger(), "Flying to A9B1 with final descend to 0.2m (%.2f, %.2f)", px, py);
+    } else {
+        publish_position(px, py, 0.17);
+        auto elapsed = this->now() - hold_pisition_start_time_;
+        if (elapsed.seconds() >= 3.0) {
+            publishLEDCommand(0);
+            auto arm_req = std::make_shared<mavros_msgs::srv::CommandBool::Request>();
+            arm_req->value = false;
+            arming_client_->async_send_request(arm_req);
+            rclcpp::sleep_for(std::chrono::seconds(3));
+            RCLCPP_INFO(this->get_logger(), "Landing completed and disarmed. Mission complete.");
+            rclcpp::shutdown();
+        }
+    }
+    break;
         }
     }
 
@@ -316,9 +334,9 @@ private:
                 last_request_time_ = this->now();
                 RCLCPP_INFO(this->get_logger(), "Requesting OFFBOARD mode...");
                 // 实飞建议遥控器手动切模式，代码可屏蔽
-                // auto mode_req = std::make_shared<mavros_msgs::srv::SetMode::Request>();
-                // mode_req->custom_mode = "OFFBOARD";
-                // set_mode_client_->async_send_request(mode_req);
+                auto mode_req = std::make_shared<mavros_msgs::srv::SetMode::Request>();
+                mode_req->custom_mode = "OFFBOARD";
+                set_mode_client_->async_send_request(mode_req);
             }
             return;
         }
@@ -370,10 +388,10 @@ private:
         // 发布消息
         laser_pointer_pub_->publish(message);
    
-        // RCLCPP_INFO(this->get_logger(), "laser pointer on");
+        RCLCPP_INFO(this->get_logger(), "laser pointer on");
     }
 
-    void k230_class(int class_id,const std::string& label) {
+    void k230_class(int class_id,const std::string& label,int num1,int num2,int num3) {
         // 定义 class_map
         static const std::unordered_map<int, std::string> class_map = {
             {0, "elephant"},
@@ -390,19 +408,40 @@ private:
             }
             // 创建并发布动物名称
             auto id_msg = std_msgs::msg::String();
-            id_msg.data ="page1.t"+ std::to_string(send_to_screen_count) +".txt=\"" + class_name + "\"";
+            id_msg.data ="page1.t"+ std::to_string(num1) +".txt=\"" + class_name + "\"";
             serial_screen_pub_->publish(id_msg);
-            send_to_screen_count++;
+            
 
             auto num_msg = std_msgs::msg::String();
-            num_msg.data="page1.t"+ std::to_string(send_to_screen_count) +".txt=\"" + std::to_string(k230_num) + "\"";
+            num_msg.data="page1.t"+ std::to_string(num2) +".txt=\"" + std::to_string(k230_num) + "\"";
             serial_screen_pub_->publish(num_msg);
-            send_to_screen_count++;
+            
 
             auto pos_msg = std_msgs::msg::String();
-            pos_msg.data="page1.t"+ std::to_string(send_to_screen_count) +".txt=\"" + label + "\"";
+            pos_msg.data="page1.t"+ std::to_string(num3) +".txt=\"" + label + "\"";
             serial_screen_pub_->publish(pos_msg);
-            send_to_screen_count++;
+            
+    }
+
+     void publishLEDCommand(int flag)
+    {   
+        bool toggle_state_=true;
+        if(flag==1)
+        {
+        auto msg = std_msgs::msg::Bool();
+        msg.data = toggle_state_;
+        led_publisher_->publish(msg);
+        //RCLCPP_INFO(this->get_logger(), "发布: %s", toggle_state_ ? "True" : "False");
+        }
+        else{
+        auto msg = std_msgs::msg::Bool();
+        toggle_state_ = !toggle_state_;
+        msg.data = toggle_state_;
+        led_publisher_->publish(msg);
+        //RCLCPP_INFO(this->get_logger(), "发布: %s", toggle_state_ ? "True" : "False");
+            
+        }
+        
     }
 
     bool Ex_vision_fly_to_target(double errx, double erry, double pz) {
@@ -431,12 +470,14 @@ private:
     float offset_x;
     float offset_y;
     int class_id;
-    int send_to_screen_count=1;
+    int send_to_screen_count1=1;
+    int send_to_screen_count2=2;
+    int send_to_screen_count3=3;
     int k230_num;
-
     rclcpp::Time last_request_time_;
     rclcpp::Time start_time_;
     rclcpp::Time hold_pisition_start_time_;
+    bool k230_get_animal=false;
     bool hold_position_start_ = false;
     bool waypoints_ready_ = false;
     mavros_msgs::msg::State current_state_;
@@ -453,6 +494,7 @@ private:
     rclcpp::Publisher<mavros_msgs::msg::PositionTarget>::SharedPtr raw_pub_;
     rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr laser_pointer_pub_;
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr serial_screen_pub_;
+    rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr led_publisher_;
     rclcpp::Client<mavros_msgs::srv::SetMode>::SharedPtr set_mode_client_;
     rclcpp::Client<mavros_msgs::srv::CommandBool>::SharedPtr arming_client_;
     rclcpp::TimerBase::SharedPtr timer_;
