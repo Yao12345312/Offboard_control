@@ -41,7 +41,7 @@ sudo systemctl start my_auto_boot.service
 ```
 sudo journalctl -u my_auto_boot.service -f
 ```
-
+**设置自启动后，可以取消程序中自动切换offboard模式的注释，PX4修改对应参数，无需遥控器起飞**
 
 **注意：开机自启程序使用串口时，会产生权限问题，影响其他节点导致初始化失败，办法如下：**
 
