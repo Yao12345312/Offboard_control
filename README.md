@@ -1,3 +1,4 @@
+## 材料选型
 |  配件   | 选型  |
 |  ----  | ----  |
 | 飞控  | 微空H743 |
@@ -14,7 +15,8 @@
 
 系统环境：PX4 1.14.3+Ubuntu24.04+ROS2jazzy
 
-
+## 开机自启动服务设置
+**开机自启程序使用除ttyAMA0以外的串口时，会产生权限问题，影响其他节点导致初始化失败 **
 开启开机自启动tracked2vision
 ```
 sudo systemctl enable my_auto_boot.service
