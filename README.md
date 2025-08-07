@@ -1,5 +1,4 @@
 # 24 ground_station with CM4 IO board,or rasbarry PI5
-## 25H_groundstation.py使用绘图控件显示轨迹，25H_groundstation2.py使用外部图片控件显示轨迹
 
 ## 近几年题目均涉及到地面站设计，我们使用陶晶驰串口屏，需要注意以下几点
 
@@ -151,3 +150,5 @@ export ROS_DOMAIN_ID=30   # 选择一个域 ID（可以是任意值，主从机�
 export ROS_MASTER_URI=http://192.168.43.1:11311
  # 设置为 主机 的 IP 地址（通过前面的iw dev wlan0 info查询)
 ```
+
+##25H_groundstation.py使用绘图控件显示轨迹，25H_groundstation2.py使用外部图片控件显示轨迹
