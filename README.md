@@ -44,6 +44,30 @@ sudo systemctl start my_auto_boot.service
 sudo journalctl -u my_auto_boot.service -f
 ```
 
+**无人机定位启动流程**
+***确保树莓派串口通讯线与飞控连接**
+
+1.左边栏点击打开Terminator终端
+
+2.终端输入
+```
+ros2 launch tracked2vision tracked2vision.launch.py
+
+```
+启动定位算法
+
+3.启动完毕后，新开一个终端，查看定位效果
+```
+rviz2
+
+```
+检查定位数据是否正常
+```
+ros2 topic echo /mavros/localposition_pose/pose
+
+```
+若输出x、y为0左右，z为实际高度，水平移动飞机x，y跟随变化，即正常，可以飞行
+
 
 **注意：开机自启程序使用串口时，会产生权限问题，影响其他节点导致初始化失败，办法如下：**
 
